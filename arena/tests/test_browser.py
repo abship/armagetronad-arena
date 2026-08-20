@@ -241,6 +241,7 @@ return (function() {
     documentReadyState: document.readyState,
     errors: (window.__arenaErrors || []).slice(-16),
     modulePresent: typeof Module !== 'undefined',
+    stage: (typeof Module !== 'undefined') ? (Module['arenaClientStage'] || 'runtime-startup') : null,
     statusError: statusError,
     ticketVisible: window.location.href.indexOf('ticket=') !== -1,
     transport: transportStatus,

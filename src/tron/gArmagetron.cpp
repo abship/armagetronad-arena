@@ -59,6 +59,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
 EM_JS( int, sg_ArenaRelayConfigured, (), {
+    Module['arenaClientStage'] = 'auto-connect';
     return Module['arenaRelayURL'] && Module['arenaRelayTicket'] ? 1 : 0;
 } );
 #endif
@@ -858,7 +859,9 @@ int main(int argc,char **argv){
 
                     //std::cout << "init sound\n";
 
+#ifndef __EMSCRIPTEN__
                     welcome();
+#endif
 
                     //std::cout << "atexit\n";
 

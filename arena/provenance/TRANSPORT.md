@@ -24,3 +24,6 @@ also permits only one live connection per `(session, player)` slot.
 The feasibility static server strips query strings from request logs. Browser
 failure diagnostics record only bounded, ticket-redacted state and screenshots;
 they never retain the credential-bearing startup URL.
+
+The Emscripten client bypasses the native interactive welcome/first-use UI and
+enters the Arena auto-connect seam directly. Native startup remains unchanged.
