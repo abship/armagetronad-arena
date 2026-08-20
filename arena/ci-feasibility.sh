@@ -41,9 +41,11 @@ docker run -d \
     --name arena-static \
     --platform linux/amd64 \
     --network host \
+    -v "$repo_dir:/src:ro" \
     -v "$repo_dir/build/web:/web:ro" \
+    -w /src \
     "$EMSDK_IMAGE_LINUX_AMD64" \
-    python3 -m http.server 8000 --bind 127.0.0.1 --directory /web >/dev/null
+    python3 arena/static_server.py --port 8000 --host 127.0.0.1 --directory /web >/dev/null
 
 docker run -d \
     --name arena-relay \

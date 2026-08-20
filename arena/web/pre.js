@@ -20,8 +20,8 @@ var arenaPlayer = (arenaSearch.get('player') || 'ArenaPlayer')
 
 Module['preRun'] = Module['preRun'] || [];
 Module['preRun'].push(function() {
-  FS.mkdirTree('/user/var');
-  FS.writeFile('/user/var/user.cfg',
+  FS.mkdirTree('/user/config');
+  FS.writeFile('/user/config/user.cfg',
     'FIRST_USE 0\nPLAYER_1 ' + arenaPlayer + '\nBIG_BROTHER 0\n');
 });
 Module['arguments'] = [

@@ -15,6 +15,15 @@
   <canvas id="canvas" width="1280" height="720" tabindex="0"
     role="application" aria-label="Arena Grid game canvas"
     oncontextmenu="event.preventDefault()"></canvas>
+  <script>
+    window.__arenaErrors = [];
+    window.addEventListener('error', function(event) {
+      window.__arenaErrors.push(String(event.message || 'window error').slice(0, 256));
+    });
+    window.addEventListener('unhandledrejection', function(event) {
+      window.__arenaErrors.push(String(event.reason || 'unhandled rejection').slice(0, 256));
+    });
+  </script>
   {{{ SCRIPT }}}
 </body>
 </html>

@@ -12,6 +12,7 @@ import json
 import math
 import os
 import pathlib
+import re
 import struct
 import time
 import urllib.error
@@ -24,6 +25,10 @@ ARENA_DIR = pathlib.Path(__file__).resolve().parents[1]
 RELAY_SPEC = importlib.util.spec_from_file_location("arena_relay", ARENA_DIR / "relay.py")
 RELAY = importlib.util.module_from_spec(RELAY_SPEC)
 RELAY_SPEC.loader.exec_module(RELAY)
+
+
+def redact(value):
+    return re.sub(r"([?&]ticket=)[^&#\s]+", r"\1[redacted]", str(value))[:1000]
 
 
 def request(base, method, path, payload=None, timeout=30):
@@ -223,11 +228,22 @@ def browser_state(base, session):
 return (function() {
   var canvas = document.getElementById('canvas');
   var transport = (typeof Module !== 'undefined') && Module['arenaSocketTransport'];
+  var transportStatus = null;
+  var statusError = null;
+  try {
+    transportStatus = transport && transport['status'] ? transport['status']() : null;
+  } catch (error) {
+    statusError = String(error).slice(0, 256);
+  }
   return {
     canvasWidth: canvas ? canvas.width : 0,
     canvasHeight: canvas ? canvas.height : 0,
+    documentReadyState: document.readyState,
+    errors: (window.__arenaErrors || []).slice(-16),
+    modulePresent: typeof Module !== 'undefined',
+    statusError: statusError,
     ticketVisible: window.location.href.indexOf('ticket=') !== -1,
-    transport: transport ? transport['status']() : null,
+    transport: transportStatus,
     title: document.title
   };
 })();
@@ -243,8 +259,22 @@ def wait_for(predicate, timeout, description):
             last = predicate()
             if last:
                 return last
-        except (RuntimeError, urllib.error.URLError):
-            pass
+        except (RuntimeError, urllib.error.URLError) as error:
+            last = redact(error)
+        time.sleep(0.25)
+    raise RuntimeError("timed out waiting for {0}; last={1!r}".format(description, last))
+
+
+def wait_for_state(base, session, timeout, description, accept):
+    deadline = time.monotonic() + timeout
+    last = None
+    while time.monotonic() < deadline:
+        try:
+            last = browser_state(base, session)
+            if accept(last):
+                return last
+        except (RuntimeError, urllib.error.URLError) as error:
+            last = {"webdriverError": redact(error)}
         time.sleep(0.25)
     raise RuntimeError("timed out waiting for {0}; last={1!r}".format(description, last))
 
@@ -289,15 +319,15 @@ def main():
             )
 
         for number, (session, player) in enumerate(sessions):
-            state = wait_for(
-                lambda session=session: (
-                    lambda value: value if value.get("transport") and
-                    value["transport"].get("open", 0) >= 1 and
-                    value.get("canvasWidth", 0) > 0 and
-                    not value.get("ticketVisible") else None
-                )(browser_state(args.webdriver_url, session)),
+            state = wait_for_state(
+                args.webdriver_url,
+                session,
                 45,
                 player + " Wasm canvas and authenticated datagram socket",
+                lambda value: value.get("transport") and
+                value["transport"].get("open", 0) >= 1 and
+                value.get("canvasWidth", 0) > 0 and
+                not value.get("ticketVisible"),
             )
             canvas = find_element(args.webdriver_url, session, "#canvas")
             key_name = "ArrowLeft" if number == 0 else "ArrowRight"
@@ -329,14 +359,14 @@ def main():
         result = wait_for(authoritative_result, args.timeout, "authoritative 1v1 result")
         (evidence_dir / (args.browser + "-result.log")).write_text(result, encoding="utf-8")
         for index, (session, player) in enumerate(sessions):
-            final_state = wait_for(
-                lambda session=session: (
-                    lambda value: value if value.get("transport") and
-                    value["transport"].get("sentDatagrams", 0) > 0 and
-                    value["transport"].get("receivedDatagrams", 0) > 0 else None
-                )(browser_state(args.webdriver_url, session)),
+            final_state = wait_for_state(
+                args.webdriver_url,
+                session,
                 15,
                 player + " bidirectional datagram traffic",
+                lambda value: value.get("transport") and
+                value["transport"].get("sentDatagrams", 0) > 0 and
+                value["transport"].get("receivedDatagrams", 0) > 0,
             )
             screenshot = request(
                 args.webdriver_url,
@@ -358,6 +388,21 @@ def main():
             ": two rendered upstream Wasm clients exchanged datagrams, accepted W3C turns, " +
             "and completed an authoritative 1v1"
         )
+    except Exception:
+        diagnostics = []
+        for session, player in sessions:
+            try:
+                diagnostics.append({"player": player, "state": browser_state(args.webdriver_url, session)})
+                screenshot = request(
+                    args.webdriver_url, "GET", "/session/{0}/screenshot".format(session)
+                )["value"]
+                (evidence_dir / (player + "-failure.png")).write_bytes(base64.b64decode(screenshot))
+            except Exception as diagnostic_error:
+                diagnostics.append({"player": player, "diagnosticError": redact(diagnostic_error)})
+        (evidence_dir / (args.browser + "-failure.json")).write_text(
+            json.dumps(diagnostics, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        raise
     finally:
         for session, _player in sessions:
             try:

@@ -20,3 +20,7 @@ lifetime. The ticket carries the authoritative `(session, player)` identity,
 travels in a WebSocket subprotocol, is removed from browser history after
 startup, is never written to evidence, and can be used only once. The relay
 also permits only one live connection per `(session, player)` slot.
+
+The feasibility static server strips query strings from request logs. Browser
+failure diagnostics record only bounded, ticket-redacted state and screenshots;
+they never retain the credential-bearing startup URL.
