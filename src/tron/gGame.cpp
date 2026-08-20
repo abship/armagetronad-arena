@@ -2092,7 +2092,14 @@ bool ConnectToServerCore(nServerInfoBase *server)
     eSoundLocker locker;
 #endif
 
+#ifdef __EMSCRIPTEN__
+    // Browser rendering is owned by the explicit connection loop below.  Native
+    // console auto-display re-enters SwapGL through callback lists while a
+    // network message is being printed, which is not safe with the Wasm ABI.
+    sr_con.autoDisplayAtNewline=false;
+#else
     sr_con.autoDisplayAtNewline=true;
+#endif
     sr_con.fullscreen=true;
 
     sr_textOut=true;

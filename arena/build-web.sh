@@ -35,7 +35,7 @@ rm -rf "$artifact_dir"
 mkdir -p "$artifact_dir"
 
 docker build \
-    --quiet \
+    --progress=plain \
     --platform "$platform" \
     --file "$arena_dir/docker/Dockerfile.web" \
     --target artifact \
