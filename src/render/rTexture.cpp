@@ -38,6 +38,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "tException.h"
 #include "tResourceManager.h"
 
+#include <cstring>
 #include <sstream>
 
 #ifndef DEDICATED
@@ -313,7 +314,25 @@ void rSurface::CopyFrom( rSurface const & other )
     tASSERT( other.surface_ );
 
     // copy surface
+#ifdef __EMSCRIPTEN__
+    SDL_PixelFormat const * format = other.surface_->format;
+    surface_ = SDL_CreateRGBSurface( SDL_SWSURFACE,
+                                    other.surface_->w, other.surface_->h,
+                                    format->BitsPerPixel,
+                                    format->Rmask, format->Gmask,
+                                    format->Bmask, format->Amask );
+    tASSERT( surface_ );
+    tASSERT( surface_->pitch == other.surface_->pitch );
+    tASSERT( surface_->pixels );
+    tASSERT( other.surface_->pixels );
+
+    // Emscripten's SDL1 IMG_Load keeps decoded pixels but discards its
+    // backing canvas after OpenGL starts, so SDL_ConvertSurface cannot copy it.
+    std::memcpy( surface_->pixels, other.surface_->pixels,
+                 static_cast< std::size_t >( surface_->pitch ) * surface_->h );
+#else
     surface_ = SDL_ConvertSurface(other.surface_, other.surface_->format, SDL_SWSURFACE);
+#endif
 
     // copy flags
     format_ = other.format_;
