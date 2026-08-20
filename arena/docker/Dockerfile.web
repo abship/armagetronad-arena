@@ -90,6 +90,7 @@ RUN SDL_CONFIG=/src/arena/web/sdl-config \
         --host=wasm32-unknown-emscripten \
         --prefix=/arena-web \
         --disable-authentication \
+        --disable-binreloc \
         --disable-curl \
         --disable-desktop \
         --disable-etc \

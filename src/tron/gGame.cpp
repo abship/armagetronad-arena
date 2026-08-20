@@ -2083,10 +2083,12 @@ bool ConnectToServerCore(nServerInfoBase *server)
 #ifdef __EMSCRIPTEN__
     sg_ArenaSetClientStage( "connect-render-reset" );
 #endif
+#ifndef __EMSCRIPTEN__
     rSysDep::SwapGL();
     rSysDep::ClearGL();
     rSysDep::SwapGL();
     rSysDep::ClearGL();
+#endif
     eSoundLocker locker;
 #endif
 
