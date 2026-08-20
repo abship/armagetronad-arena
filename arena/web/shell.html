@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Arena Grid — upstream feasibility client</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: #05070b; color: #dce8ff; }
+    body { display: grid; place-items: center; overflow: hidden; font: 14px system-ui, sans-serif; }
+    canvas { width: min(100vw, 1280px); height: min(100vh, 720px); outline: none; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas" width="1280" height="720" tabindex="0"
+    role="application" aria-label="Arena Grid game canvas"
+    oncontextmenu="event.preventDefault()"></canvas>
+  {{{ SCRIPT }}}
+</body>
+</html>
