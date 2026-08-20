@@ -48,6 +48,22 @@ jobs:
       - name: Run authoritative two-client Chrome and Firefox 1v1
         run: ./arena/ci-feasibility.sh
 
+      - name: Symbolicate Wasm runtime failure
+        if: failure()
+        shell: bash
+        run: |
+          symbol_map="$(find build/web -maxdepth 1 -type f -name '*.symbols' -print -quit)"
+          test -n "$symbol_map"
+          mapfile -t function_indices < <(
+            rg --no-filename -o 'wasm-function\[[0-9]+\]' build/runtime/evidence/*-failure.json \
+              | rg --no-filename -o '[0-9]+' \
+              | sort -nu
+          )
+          test "${#function_indices[@]}" -gt 0
+          for function_index in "${function_indices[@]}"; do
+            rg "^${function_index}:" "$symbol_map" || echo "${function_index}:[missing]"
+          done
+
       - name: Check patch whitespace
         if: always()
         run: git diff --check
@@ -60,6 +76,7 @@ jobs:
           path: |
             build/native/
             build/web/SHA256SUMS
+            build/web/*.symbols
             build/runtime/
           if-no-files-found: warn
           retention-days: 14
