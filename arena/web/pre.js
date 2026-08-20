@@ -1,5 +1,6 @@
 /* Copyright (C) 2026 Arena contributors. GPLv2+; see COPYING.txt. */
 Module['canvas'] = document.getElementById('canvas');
+Module['thisProgram'] = '/arena-web/bin/armagetronad_main';
 var arenaPreviousPrintErr = Module['printErr'];
 Module['printErr'] = function(value) {
   if (window.__arenaRecordError) window.__arenaRecordError(value);
@@ -28,7 +29,7 @@ Module['preRun'] = Module['preRun'] || [];
 Module['preRun'].push(function() {
   FS.mkdirTree('/user/var');
   FS.writeFile('/user/var/user.cfg',
-    'FIRST_USE 0\nPLAYER_1 ' + arenaPlayer + '\nBIG_BROTHER 0\n');
+    'FIRST_USE 0\nPLAYER_1 ' + arenaPlayer + '\nBIG_BROTHER 0\nSOUND_QUALITY 0\n');
 });
 Module['arguments'] = [
   '--datadir', '/data',

@@ -34,11 +34,13 @@ vm.runInNewContext(
 );
 assert.strictEqual('wss://relay.invalid/socket', context.Module.arenaRelayURL);
 assert.strictEqual('short-lived-ticket', context.Module.arenaRelayTicket);
+assert.strictEqual('/arena-web/bin/armagetronad_main', context.Module.thisProgram);
 assert.ok(!replaced.includes('ticket='));
 assert.ok(replaced.includes('relay='));
 context.Module.preRun[0]();
 assert.strictEqual('/user/var/user.cfg', writes[0][0]);
 assert.ok(writes[0][1].includes('PLAYER_1 Arena_1'));
+assert.ok(writes[0][1].includes('SOUND_QUALITY 0'));
 assert.ok(!writes[0][1].includes('short-lived-ticket'));
 context.Module.printErr('diagnostic assertion');
 assert.deepStrictEqual(['diagnostic assertion'], errors);
