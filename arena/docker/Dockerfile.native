@@ -1,3 +1,4 @@
+# Copyright (C) 2026 Arena contributors. GPLv2+; see COPYING.txt.
 ARG NATIVE_IMAGE=docker.io/library/debian@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
 FROM --platform=$TARGETPLATFORM ${NATIVE_IMAGE} AS build
 
@@ -80,5 +81,15 @@ RUN sed -i \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /dest/ /
+RUN mkdir -p /arena/data/config /arena/data/language /arena/data/resource/AATeam \
+        /arena/data/resource/Z-Man/fortress /arena/var \
+    && chown 65534:65534 /arena/var
+COPY --from=build /src/config/ /arena/data/config/
+COPY --from=build /src/arena/config/arena.cfg /arena/data/config/arena.cfg
+COPY --from=build /src/language/ /arena/data/language/
+COPY --from=build /build/language/languages.txt /arena/data/language/languages.txt
+COPY --from=build /src/resource/proto/AATeam/map-0.2.8.0_rc4.dtd /arena/data/resource/AATeam/map-0.2.8.0_rc4.dtd
+COPY --from=build /src/resource/proto/Z-Man/sumo_4x4.aamap.xml /arena/data/resource/Z-Man/fortress/sumo_4x4-0.1.1.aamap.xml
 USER 65534:65534
 ENTRYPOINT ["/usr/local/bin/armagetronad-dedicated"]
+CMD ["--datadir", "/arena/data", "--configdir", "/arena/data/config", "--userconfigdir", "/arena/var", "--vardir", "/arena/var", "--resourcedir", "/arena/data/resource", "--autoresourcedir", "/arena/var/resource-cache", "--record", "/arena/var/match.aarec", "--extraconfig", "arena.cfg"]

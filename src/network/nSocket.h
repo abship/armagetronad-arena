@@ -178,6 +178,9 @@ private:
     nAddress trueAddress_;  //!< the address the socket is really bound to
     int family_, socktype_, protocol_;    //!< more low level data determining the socket type
     mutable bool broadcast_;              //!< flag indicating whether this socket has been prepared for broadcasts
+#ifdef __EMSCRIPTEN__
+    mutable nAddress relayPeer_;           //!< native peer represented by the browser datagram relay
+#endif
 };
 
 //! collection of listening server sockets

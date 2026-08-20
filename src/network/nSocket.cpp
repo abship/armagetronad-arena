@@ -46,6 +46,34 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <stdlib.h>
 #include <vector>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+
+// JavaScript owns the browser queues; C++ remains on the upstream datagram API.
+EM_JS( int, sn_ArenaSocketCreate, (), {
+    return Module['arenaSocketTransport']['create']();
+} );
+
+EM_JS( int, sn_ArenaSocketSend, ( int id, const char * data, int length ), {
+    return Module['arenaSocketTransport']['send'](id, HEAPU8.slice(data, data + length));
+} );
+
+EM_JS( int, sn_ArenaSocketReceive, ( int id, char * data, int capacity ), {
+    var datagram = Module['arenaSocketTransport']['receive'](id);
+    if (!datagram || datagram.length > capacity) return -1;
+    HEAPU8.set(datagram, data);
+    return datagram.length;
+} );
+
+EM_JS( int, sn_ArenaSocketReady, ( int id ), {
+    return Module['arenaSocketTransport']['ready'](id) ? 1 : 0;
+} );
+
+EM_JS( void, sn_ArenaSocketClose, ( int id ), {
+    Module['arenaSocketTransport']['close'](id);
+} );
+#endif
+
 #ifndef WIN32
 #include <arpa/inet.h> 
 #include <netinet/in_systm.h>
@@ -1516,6 +1544,11 @@ int nSocket::Create( void )
 {
     tASSERT( !IsOpen() );
 
+#ifdef __EMSCRIPTEN__
+    socket_ = sn_ArenaSocketCreate();
+    return socket_ < 0 ? -1 : 0;
+#else
+
     // initialize networking at OS level
     sn_InitOSNetworking();
 
@@ -1557,6 +1590,7 @@ int nSocket::Create( void )
     // unblock it
     unsigned long _true = true;
     return ioctl (socket_, FIONBIO, &_true) == -1;
+#endif
 }
 
 // archives the binding procedure
@@ -1617,11 +1651,16 @@ int nSocket::Bind( nAddress const & addr )
     if ( !BindArchiver< tPlaybackBlock >::Archive( ret, trueAddress_ ) )
     {
         // just delegate
+#ifdef __EMSCRIPTEN__
+        trueAddress_ = addr;
+        ret = 0;
+#else
         ret = bind( socket_, addr, addr.GetAddressLength() );
 
         // read true address
         if ( 0 == ret )
             ANET_GetSocketAddr( socket_, trueAddress_ );
+#endif
     }
 
     // record the bind
@@ -1797,7 +1836,12 @@ int nSocket::Close( void )
         con << "Closing socket bound to " << trueAddress_.ToString() << "\n";
 #endif
 
+#ifdef __EMSCRIPTEN__
+    if ( socket_ >= 0 )
+        sn_ArenaSocketClose( socket_ );
+#else
     ANET_CloseSocket( socket_ );
+#endif
     socket_ = -1;
     broadcast_ = false;
 
@@ -1902,6 +1946,10 @@ const nSocket * nSocket::CheckNewConnection( void ) const
 {
     tASSERT( IsOpen() );
 
+#ifdef __EMSCRIPTEN__
+    return sn_ArenaSocketReady( socket_ ) ? this : NULL;
+#else
+
     int	available=-1;
 
     // see if the playback has anything to say
@@ -1946,6 +1994,7 @@ const nSocket * nSocket::CheckNewConnection( void ) const
     }
 
     return NULL;
+#endif
 }
 
 
@@ -2028,9 +2077,15 @@ int nSocket::Read( int8 * buf, int len, nAddress & addr ) const
 #endif
 
         // really receive
+#ifdef __EMSCRIPTEN__
+        ret = sn_ArenaSocketReceive( socket_, buf, len );
+        if ( ret >= 0 )
+            addr = relayPeer_;
+#else
         NET_SIZE addrlen = addr.GetAddressLength();
         ret = recvfrom (socket_, buf, len, 0, addr, &addrlen );
         tASSERT( addrlen <= static_cast< NET_SIZE >( addr.GetAddressLength() ) );
+#endif
     }
 
     // write recording
@@ -2038,6 +2093,9 @@ int nSocket::Read( int8 * buf, int len, nAddress & addr ) const
 
     if ( ret <= 0 )
     {
+#ifdef __EMSCRIPTEN__
+        return -1;
+#else
         switch ( ANET_Error() )
         {
         case nSocketError_Reset:
@@ -2050,6 +2108,7 @@ int nSocket::Read( int8 * buf, int len, nAddress & addr ) const
             return -1;
             break;
         }
+#endif
     }
 
     if ( ret >= 0 )
@@ -2111,7 +2170,11 @@ int nSocket::Write( const int8 * buf, int len, const sockaddr * addr, int addrle
         {
             // don't send if a playback is running
             if ( !tRecorder::IsPlayingBack() )
+#ifdef __EMSCRIPTEN__
+                ret = sn_ArenaSocketSend( socket_, buf, len );
+#else
                 ret = sendto (socket_, buf, len, 0, addr, addrlen );
+#endif
         }
     }
 
@@ -2121,6 +2184,9 @@ int nSocket::Write( const int8 * buf, int len, const sockaddr * addr, int addrle
         tRecorder::Record( section, ret );
 
         // handle error
+#ifdef __EMSCRIPTEN__
+        return -1;
+#else
         switch ( ANET_Error() )
         {
         case nSocketError_Reset:
@@ -2133,6 +2199,7 @@ int nSocket::Write( const int8 * buf, int len, const sockaddr * addr, int addrle
             return -1;
             break;
         }
+#endif
     }
 
     return ret;
@@ -2153,6 +2220,9 @@ int nSocket::Write( const int8 * buf, int len, const sockaddr * addr, int addrle
 
 int nSocket::Write( const int8 * buf, int len, const nAddress & addr ) const
 {
+#ifdef __EMSCRIPTEN__
+    relayPeer_ = addr;
+#endif
 #ifdef PRINTPACKETS
     con << trueAddress_.ToString() << " >> " << addr.ToString() << "\n";
 #endif
@@ -2178,6 +2248,10 @@ int nSocket::Broadcast( const char * buf, int len, unsigned int port ) const
 {
     tASSERT( IsOpen() );
 
+#ifdef __EMSCRIPTEN__
+    return -1;
+#else
+
     if ( !broadcast_ )
     {
         int				i = 1;
@@ -2200,6 +2274,7 @@ int nSocket::Broadcast( const char * buf, int len, unsigned int port ) const
 
     // delegate to usual write function
     return Write ( buf, len, reinterpret_cast< sockaddr *>( &broadcastaddr ), sizeof( sockaddr_in ) );
+#endif
 }
 
 // *******************************************************************************************
@@ -2279,6 +2354,9 @@ void nSocket::MoveFrom( const nSocket & other )
     socktype_ = other.socktype_;
     protocol_ = other.protocol_;
     broadcast_ = other.broadcast_;
+#ifdef __EMSCRIPTEN__
+    relayPeer_ = other.relayPeer_;
+#endif
 
     // move socket
     socket_ = other.socket_;
@@ -2650,6 +2728,16 @@ bool nBasicNetworkSystem::Select( REAL dt )
     static char const * section = "NETSELECT";
     if ( !tRecorder::PlaybackStrict( section, retval ) )
     {
+#ifdef __EMSCRIPTEN__
+        if ( controlSocket_.GetSocket() >= 0 && sn_ArenaSocketReady( controlSocket_.GetSocket() ) )
+            retval = 1;
+        else
+        {
+            if ( dt > 0 )
+                emscripten_sleep( static_cast< int >( dt * 1000 ) );
+            retval = controlSocket_.GetSocket() >= 0 && sn_ArenaSocketReady( controlSocket_.GetSocket() );
+        }
+#else
         if ( controlSocket_.GetSocket() < 0 )
         {
             tDelay( int( dt * 1000000 ) );
@@ -2683,6 +2771,7 @@ bool nBasicNetworkSystem::Select( REAL dt )
             // delegate to system select
             retval = select(max+1, &rfds, NULL, NULL, &tv);
         }
+#endif
     }
     tRecorder::Record( section, retval );
 
@@ -2782,5 +2871,3 @@ tString nSocket::PermanentError::DoGetDescription( void ) const
 {
     return description_;
 }
-
-

@@ -1,4 +1,5 @@
 #!/bin/sh
+# Copyright (C) 2026 Arena contributors. GPLv2+; see COPYING.txt.
 set -eu
 
 arena_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)

@@ -1,0 +1,65 @@
+# Copyright (C) 2026 Arena contributors. GPLv2+; see COPYING.txt.
+name: Arena linux-amd64 feasibility
+
+on:
+  pull_request:
+    branches:
+      - arena/stable-0.2.9.3.0
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-wasm-relay-1v1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out exact PR history
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          fetch-depth: 0
+
+      - name: Verify stable base and owned diff
+        shell: bash
+        run: |
+          test "$(git rev-parse 'v0.2.9.3.0^{}')" = 036daaf34f055b1efbcee6a4afc4d90a325ce569
+          git merge-base --is-ancestor 036daaf34f055b1efbcee6a4afc4d90a325ce569 HEAD
+          test -z "$(git diff --name-only 036daaf34f055b1efbcee6a4afc4d90a325ce569...HEAD -- \
+            src/engine/eGrid.cpp src/engine/eWall.cpp src/engine/eLagCompensation.cpp \
+            src/tron/gArena.cpp src/tron/gCycle.cpp src/tron/gCycleMovement.cpp \
+            src/tron/gSpawn.cpp src/tron/gWall.cpp)"
+
+      - name: Build pinned linux-amd64 dedicated server
+        run: ./arena/build-native.sh
+
+      - name: Build pinned upstream Wasm client
+        run: ./arena/build-web.sh
+
+      - name: Test datagram relay and browser socket abuse bounds
+        shell: bash
+        run: |
+          source arena/pins.env
+          docker run --rm --platform linux/amd64 \
+            -v "$PWD:/src" -w /src \
+            "$EMSDK_IMAGE_LINUX_AMD64" \
+            ./arena/test-relay.sh
+
+      - name: Run authoritative two-client Chrome and Firefox 1v1
+        run: ./arena/ci-feasibility.sh
+
+      - name: Check patch whitespace
+        if: always()
+        run: git diff --check
+
+      - name: Upload feasibility evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: arena-linux-amd64-feasibility
+          path: |
+            build/native/
+            build/web/SHA256SUMS
+            build/runtime/
+          if-no-files-found: warn
+          retention-days: 14

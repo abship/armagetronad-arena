@@ -56,6 +56,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <stdlib.h>
 #include <fstream>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+EM_JS( int, sg_ArenaRelayConfigured, (), {
+    return Module['arenaRelayURL'] && Module['arenaRelayTicket'] ? 1 : 0;
+} );
+#endif
+
 #include "nServerInfo.h"
 #include "nSocket.h"
 
@@ -866,7 +873,14 @@ int main(int argc,char **argv){
 
                     sn_bigBrotherString = renderer_identification + "VER=" + sn_programVersion + "\n\n";
 
+#ifdef __EMSCRIPTEN__
+                    if ( !sg_ArenaRelayConfigured() )
+                        tERR_ERROR( "Arena browser client requires a relay URL and one-time ticket." );
+                    nServerInfoRedirect arenaServer( tString( "127.0.0.1" ), sn_defaultPort );
+                    ConnectToServer( &arenaServer );
+#else
                     MainMenu();
+#endif
 
                     // remove all players
                     for ( int i = se_PlayerNetIDs.Len()-1; i>=0; --i )
@@ -967,4 +981,3 @@ static tConfItemFunc st_Dummy11("MASTER_SAVE_INTERVAL", &st_Dummy);
 static tConfItemFunc st_Dummy12("MASTER_IDLE", &st_Dummy);
 static tConfItemFunc st_Dummy13("MASTER_PORT", &st_Dummy);
 #endif
-

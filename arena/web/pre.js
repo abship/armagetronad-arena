@@ -1,4 +1,29 @@
+/* Copyright (C) 2026 Arena contributors. GPLv2+; see COPYING.txt. */
 Module['canvas'] = document.getElementById('canvas');
+var arenaSearch = new URLSearchParams(window.location.search);
+var arenaRelayURL = arenaSearch.get('relay');
+if (arenaRelayURL && /^wss?:\/\//.test(arenaRelayURL)) {
+  Module['arenaRelayURL'] = arenaRelayURL;
+}
+var arenaRelayTicket = arenaSearch.get('ticket');
+if (arenaRelayTicket && /^[A-Za-z0-9_.-]+$/.test(arenaRelayTicket)) {
+  Module['arenaRelayTicket'] = arenaRelayTicket;
+  arenaSearch.delete('ticket');
+  var arenaCleanQuery = arenaSearch.toString();
+  window.history.replaceState(null, '', window.location.pathname +
+    (arenaCleanQuery ? '?' + arenaCleanQuery : '') + window.location.hash);
+}
+
+var arenaPlayer = (arenaSearch.get('player') || 'ArenaPlayer')
+  .replace(/[^A-Za-z0-9_-]/g, '')
+  .slice(0, 16) || 'ArenaPlayer';
+
+Module['preRun'] = Module['preRun'] || [];
+Module['preRun'].push(function() {
+  FS.mkdirTree('/user/var');
+  FS.writeFile('/user/var/user.cfg',
+    'FIRST_USE 0\nPLAYER_1 ' + arenaPlayer + '\nBIG_BROTHER 0\n');
+});
 Module['arguments'] = [
   '--datadir', '/data',
   '--configdir', '/data/config',
