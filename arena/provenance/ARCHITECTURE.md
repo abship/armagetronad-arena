@@ -33,3 +33,19 @@ nonblank canvas screenshots, and authoritative `PLAYER_ENTERED`,
 `MATCH_WINNER`, and `GAME_END` server evidence before its runtime gate is
 reported as passed. Safari remains a separate required macOS run and is not
 implied by a green Linux job.
+
+## Current feasibility result
+
+Linux/amd64 run `32421697186` at source head `a26dc39c` passed the exact-base
+and forbidden-diff guard, pinned native and full upstream Wasm builds, and all
+relay/abuse tests. Two Chrome clients opened authenticated Arena sockets and
+exchanged complete binary datagrams, but both upstream clients trapped before
+`PLAYER_ENTERED`: one in `rConsole::DoPrint` while processing a network config
+message, and one in `tCallback::Exec` from the render per-frame task with a
+Wasm indirect-call signature mismatch. The server recorded both logins only as
+spectators and then timed them out; no `MATCH_WINNER` was produced.
+
+This repeated upstream C++ callback-ABI blocker exhausts the ARM-1 correction
+limit. Chrome/Firefox gameplay, Safari, native parity, shaped-loss/frame/memory,
+reproducibility, and release gates remain pending. ARM-1 feasibility is not a
+PASS, and no TypeScript gameplay substitute is permitted.

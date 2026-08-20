@@ -10,10 +10,11 @@ The Arena ceiling is 2,048 bytes. Stable source receives into a 2,000-element
 size. The Arena bound follows issue #319's conservative 2 KiB plan instead of
 exposing the UDP theoretical 65,507-byte maximum.
 
-Both sides reject larger datagrams. The browser additionally caps queued input
-and output at 32 messages and 32 KiB, rejects stale controls after one second,
-and closes on WebSocket `bufferedAmount` backlog. The relay rate-limits complete
-messages and never splits or joins them.
+Both sides reject larger datagrams. The browser caps queued output at 32
+messages and queued input at 128 messages, with a 32 KiB byte cap in either
+direction. It rejects stale controls after one second and closes on WebSocket
+`bufferedAmount` backlog. The relay rate-limits complete messages and never
+splits or joins them.
 
 Authentication uses a server-minted HMAC ticket with a maximum five-minute
 lifetime. The ticket carries the authoritative `(session, player)` identity,
