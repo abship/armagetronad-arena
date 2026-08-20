@@ -83,6 +83,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "nSocket.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+EM_JS( void, sg_ArenaSetClientStage, ( const char * stage ), {
+    Module['arenaClientStage'] = UTF8ToString(stage);
+} );
+#endif
+
 #ifdef KRAWALL_SERVER
 #include "nKrawall.h"
 #endif
@@ -2047,6 +2054,9 @@ static void sg_StopQuickExit()
 // return code: false if there was an error or abort
 bool ConnectToServerCore(nServerInfoBase *server)
 {
+#ifdef __EMSCRIPTEN__
+    sg_ArenaSetClientStage( "connect-clear-players" );
+#endif
     tASSERT( server );
 
     ePlayerNetID::ClearAll();
@@ -2060,6 +2070,9 @@ bool ConnectToServerCore(nServerInfoBase *server)
 
     just_connected=true;
 
+#ifdef __EMSCRIPTEN__
+    sg_ArenaSetClientStage( "connect-viewport" );
+#endif
     rViewport::Update(MAX_PLAYERS);
     // ePlayerNetID::Update();
 
@@ -2067,6 +2080,9 @@ bool ConnectToServerCore(nServerInfoBase *server)
 
     {
 #ifndef DEDICATED
+#ifdef __EMSCRIPTEN__
+    sg_ArenaSetClientStage( "connect-render-reset" );
+#endif
     rSysDep::SwapGL();
     rSysDep::ClearGL();
     rSysDep::SwapGL();
@@ -2088,6 +2104,9 @@ bool ConnectToServerCore(nServerInfoBase *server)
     o.SetTemplateParameter(1, server->GetName());
     o << "$network_connecting_to_server";
     con << o;
+#ifdef __EMSCRIPTEN__
+    sg_ArenaSetClientStage( "connect-server" );
+#endif
     error = server->Connect();
 
     switch (error)
@@ -4960,4 +4979,3 @@ static void sg_FillServerSettings()
 }
 
 static nCallbackFillServerInfo sg_fillServerSettings(sg_FillServerSettings);
-

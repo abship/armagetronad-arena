@@ -6,11 +6,14 @@ var vm = require('vm');
 var assert = require('assert');
 var replaced = null;
 var writes = [];
+var errors = [];
 var context = {
   Module: {},
   URLSearchParams: URLSearchParams,
   document: { getElementById: function() { return {}; } },
   window: {
+    __arenaRecordError: function(value) { errors.push(String(value)); },
+    console: { error: function() {} },
     location: {
       search: '?relay=wss%3A%2F%2Frelay.invalid%2Fsocket&ticket=short-lived-ticket&player=Arena_1',
       pathname: '/client/',
@@ -37,4 +40,6 @@ context.Module.preRun[0]();
 assert.strictEqual('/user/var/user.cfg', writes[0][0]);
 assert.ok(writes[0][1].includes('PLAYER_1 Arena_1'));
 assert.ok(!writes[0][1].includes('short-lived-ticket'));
+context.Module.printErr('diagnostic assertion');
+assert.deepStrictEqual(['diagnostic assertion'], errors);
 console.log('browser ticket bootstrap tests: pass');

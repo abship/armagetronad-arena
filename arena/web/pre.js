@@ -1,5 +1,11 @@
 /* Copyright (C) 2026 Arena contributors. GPLv2+; see COPYING.txt. */
 Module['canvas'] = document.getElementById('canvas');
+var arenaPreviousPrintErr = Module['printErr'];
+Module['printErr'] = function(value) {
+  if (window.__arenaRecordError) window.__arenaRecordError(value);
+  if (arenaPreviousPrintErr) arenaPreviousPrintErr(value);
+  else if (window.console && window.console.error) window.console.error(value);
+};
 var arenaSearch = new URLSearchParams(window.location.search);
 var arenaRelayURL = arenaSearch.get('relay');
 if (arenaRelayURL && /^wss?:\/\//.test(arenaRelayURL)) {

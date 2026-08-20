@@ -17,11 +17,23 @@
     oncontextmenu="event.preventDefault()"></canvas>
   <script>
     window.__arenaErrors = [];
+    window.__arenaRecordError = function(value) {
+      var message = String(value || 'browser runtime error')
+        .replace(/([?&]ticket=)[^&#\s]+/g, '$1[redacted]')
+        .replace(/arena-auth-[A-Za-z0-9_.-]+/g, 'arena-auth-[redacted]')
+        .slice(0, 1000);
+      window.__arenaErrors.push(message);
+      if (window.__arenaErrors.length > 32) window.__arenaErrors.shift();
+    };
     window.addEventListener('error', function(event) {
-      window.__arenaErrors.push(String(event.message || 'window error').slice(0, 256));
+      window.__arenaRecordError(
+        event.error && event.error.stack ? event.error.stack : event.message || 'window error'
+      );
     });
     window.addEventListener('unhandledrejection', function(event) {
-      window.__arenaErrors.push(String(event.reason || 'unhandled rejection').slice(0, 256));
+      window.__arenaRecordError(
+        event.reason && event.reason.stack ? event.reason.stack : event.reason || 'unhandled rejection'
+      );
     });
   </script>
   {{{ SCRIPT }}}

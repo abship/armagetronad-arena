@@ -51,7 +51,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // JavaScript owns the browser queues; C++ remains on the upstream datagram API.
 EM_JS( int, sn_ArenaSocketCreate, (), {
-    return Module['arenaSocketTransport']['create']();
+    Module['arenaClientStage'] = 'socket-create';
+    var id = Module['arenaSocketTransport']['create']();
+    Module['arenaClientStage'] = id >= 0 ? 'socket-created' : 'socket-create-failed';
+    return id;
 } );
 
 EM_JS( int, sn_ArenaSocketSend, ( int id, const char * data, int length ), {
