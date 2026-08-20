@@ -361,6 +361,12 @@ static SDL_AudioSpec * SDLCALL SDL_LoadWAV(char const *file, SDL_AudioSpec *spec
 void eWavData::Load(){
     //wavs.Add(this,id);
 
+#ifdef __EMSCRIPTEN__
+    // The Arena browser profile disables audio; do not eagerly decode it.
+    if (sound_quality == SOUND_OFF)
+        return;
+#endif
+
     if (data)
     {
         loadError = false;
@@ -924,4 +930,3 @@ eSoundLocker::~eSoundLocker()
 {
     se_SoundUnlock();
 }
-
