@@ -48,8 +48,14 @@ for browser in "$@"; do
         "$image" >/dev/null
 
     ready=false
-    for attempt in $(seq 1 60); do
-        if test "$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$container")" = healthy; then
+    for attempt in $(seq 1 120); do
+        if docker run --rm \
+            --platform linux/amd64 \
+            --network host \
+            "$EMSDK_IMAGE_LINUX_AMD64" \
+            python3 -c \
+                "import json, urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:4444/status', timeout=2))['value']['ready']" \
+                >/dev/null 2>&1; then
             ready=true
             break
         fi
