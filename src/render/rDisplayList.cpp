@@ -30,7 +30,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "rScreen.h"
 
 #ifdef DEBUG
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(__EMSCRIPTEN__)
 #define LIST_STATS
 #endif
 #endif
@@ -66,12 +66,12 @@ private:
 static rListCounter sr_counter;
 #endif
 
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(__EMSCRIPTEN__)
 static rDisplayList * se_displayListAnchor = NULL;
 #endif
 
 rDisplayList::rDisplayList()
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(__EMSCRIPTEN__)
     : tListItem< rDisplayList >( se_displayListAnchor )
     , list_( 0 )
     , inhibit_( 0 )
@@ -82,7 +82,7 @@ rDisplayList::rDisplayList()
 
 rDisplayList::~rDisplayList()
 {
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(__EMSCRIPTEN__)
     tASSERT( !filling_ );
 
     Clear();
@@ -102,7 +102,7 @@ bool rDisplayList::IsRecording()
 // calls the display list, returns true if there was a list to call
 bool rDisplayList::OnCall()
 {
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(__EMSCRIPTEN__)
     tASSERT( !filling_ );
 
     // abort previous glBegin block
@@ -139,7 +139,7 @@ bool rDisplayList::OnCall()
 //! clears the display list and don't regenerate it for the next few calls
 void rDisplayList::Clear( int inhibitGeneration )
 {
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(__EMSCRIPTEN__)
     // clear the list
     if ( !filling_ && list_ )
     {
@@ -172,7 +172,7 @@ void rDisplayList::Clear( int inhibitGeneration )
 // clears all display lists
 void rDisplayList::ClearAll()
 {
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(__EMSCRIPTEN__)
     Cancel();
     tASSERT(!IsRecording());
 
@@ -190,7 +190,7 @@ void rDisplayList::ClearAll()
 // cancels recording of current display list
 void rDisplayList::Cancel()
 {
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(__EMSCRIPTEN__)
     if ( sr_currentFiller )
     {
         sr_currentFiller->list_.Clear(0);
@@ -217,7 +217,7 @@ bool rDisplayListAlphaSensitive::OnCall()
 
 //! constructor, automatically starting to fill teh list
 rDisplayListFiller::rDisplayListFiller( rDisplayList & list, bool respectBlacklist )
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(__EMSCRIPTEN__)
     : list_( list )
 #endif
 {
@@ -227,7 +227,7 @@ rDisplayListFiller::rDisplayListFiller( rDisplayList & list, bool respectBlackli
 // starts filling the display list
 void rDisplayListFiller::Start( bool respectBlacklist )
 {
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(__EMSCRIPTEN__)
     bool useList = sr_useDisplayLists != rDisplayList_Off && list_.inhibit_ == 0 && !sr_currentFiller;
 
     // don't ever use display lists if they are blacklisted
@@ -274,7 +274,7 @@ rDisplayListFiller::~rDisplayListFiller()
 //! stops filling the display list (done automatically on destruction)
 void rDisplayListFiller::Stop()
 {
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(__EMSCRIPTEN__)
     if ( list_.filling_ )
     {
         tASSERT( list_.list_ );

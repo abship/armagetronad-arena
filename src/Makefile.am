@@ -168,6 +168,9 @@ noinst_LIBRARIES = libnetwork.a libtools.a
 endif
 
 armagetronad_main_SOURCES = tron/gFloor.cpp
+if EMSCRIPTEN
+armagetronad_main_SOURCES += $(top_srcdir)/arena/web/compat.cpp
+endif
 armagetronad_main_CXXFLAGS =$(libtron_a_CXXFLAGS)
 armagetronad_main_LDADD=libtron.a libenginecore.a libengine.a libnetwork.a libui.a librender.a libtools.a
 

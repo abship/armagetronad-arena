@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+args=" $* "
+case "$args" in
+    *' --atleast-pkgconfig-version '*) exit 0 ;;
+esac
+
+case "$args" in
+    *' libxml-2.0 '*) module=libxml2 ;;
+    *' libpng '*) module=libpng ;;
+    *) exit 1 ;;
+esac
+
+case "$args" in
+    *' --exists '*|*' --print-errors '*) exit 0 ;;
+    *' --modversion '*)
+        test "$module" = libxml2 && echo 2.9.14 || echo 1.6.43
+        ;;
+    *' --cflags '*)
+        test "$module" = libxml2 && echo '-I/deps/libxml2/include/libxml2' || echo '-sUSE_LIBPNG=1'
+        ;;
+    *' --libs '*)
+        test "$module" = libxml2 && echo '/deps/libxml2/lib/libxml2.a' || echo '-sUSE_LIBPNG=1'
+        ;;
+    *) exit 1 ;;
+esac

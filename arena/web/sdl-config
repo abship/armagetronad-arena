@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+
+case "${1:-}" in
+    --version) echo 1.2.15 ;;
+    --cflags) echo '-sUSE_SDL=1 -I/emsdk/upstream/emscripten/cache/sysroot/include/SDL' ;;
+    --libs) echo '-sUSE_SDL=1 -sUSE_SDL_IMAGE=1 -sUSE_LIBPNG=1 -sLEGACY_GL_EMULATION=1' ;;
+    *) echo "unsupported sdl-config option: ${1:-}" >&2; exit 2 ;;
+esac

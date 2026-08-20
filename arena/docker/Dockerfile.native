@@ -1,0 +1,84 @@
+ARG NATIVE_IMAGE=docker.io/library/debian@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+FROM --platform=$TARGETPLATFORM ${NATIVE_IMAGE} AS build
+
+ARG DEBIAN_SNAPSHOT
+ARG AUTOCONF_VERSION
+ARG AUTOMAKE_VERSION
+ARG GXX_VERSION
+ARG LIBTOOL_VERSION
+ARG LIBXML2_DEV_VERSION
+ARG MAKE_VERSION
+ARG PKG_CONFIG_VERSION
+ARG PYTHON3_VERSION
+ARG ARENA_SOURCE_DATE_EPOCH
+ARG ARENA_SOURCE_TAG
+
+RUN sed -i \
+        -e "s#http://deb.debian.org/debian-security#http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}#" \
+        -e "s#http://deb.debian.org/debian#http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}#" \
+        /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Check-Valid-Until=false update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
+        autoconf=${AUTOCONF_VERSION} \
+        automake=${AUTOMAKE_VERSION} \
+        g++=${GXX_VERSION} \
+        libtool=${LIBTOOL_VERSION} \
+        libxml2-dev=${LIBXML2_DEV_VERSION} \
+        make=${MAKE_VERSION} \
+        pkg-config=${PKG_CONFIG_VERSION} \
+        python3=${PYTHON3_VERSION} \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV SOURCE_DATE_EPOCH=${ARENA_SOURCE_DATE_EPOCH} \
+    CI_COMMIT_REF_PROTECTED=true \
+    CI_COMMIT_TAG=${ARENA_SOURCE_TAG}
+WORKDIR /src
+COPY . .
+
+RUN ./bootstrap.sh
+RUN mkdir /build /dest \
+    && cd /build \
+    && CFLAGS="-O2 -g0 -ffile-prefix-map=/src=. -ffile-prefix-map=/build=." \
+       CXXFLAGS="-O2 -g0 -ffile-prefix-map=/src=. -ffile-prefix-map=/build=." \
+       /src/configure \
+        --prefix=/usr/local \
+        --enable-dedicated \
+        --disable-authentication \
+        --disable-curl \
+        --disable-desktop \
+        --disable-etc \
+        --disable-games \
+        --disable-initscripts \
+        --disable-master \
+        --disable-memmanager \
+        --disable-migratestate \
+        --disable-music \
+        --disable-restoreold \
+        --disable-sysinstall \
+        --disable-uninstall \
+        --disable-useradd \
+    && make -j1 \
+    && make DESTDIR=/dest install
+
+FROM scratch AS artifact
+COPY --from=build /dest/usr/local/bin/armagetronad-dedicated /armagetronad-dedicated
+COPY --from=build /src/COPYING.txt /COPYING.txt
+
+ARG NATIVE_IMAGE=docker.io/library/debian@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+FROM --platform=$TARGETPLATFORM ${NATIVE_IMAGE} AS runtime
+
+ARG DEBIAN_SNAPSHOT
+ARG LIBXML2_RUNTIME_VERSION
+
+RUN sed -i \
+        -e "s#http://deb.debian.org/debian-security#http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}#" \
+        -e "s#http://deb.debian.org/debian#http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}#" \
+        /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Check-Valid-Until=false update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
+        libxml2=${LIBXML2_RUNTIME_VERSION} \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /dest/ /
+USER 65534:65534
+ENTRYPOINT ["/usr/local/bin/armagetronad-dedicated"]

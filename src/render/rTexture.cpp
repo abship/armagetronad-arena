@@ -220,7 +220,9 @@ void rSurface::Create( char const * fileName )
     tString s = tDirectories::Data().GetReadPath( fileName );
 
     // Load image
+#ifndef __EMSCRIPTEN__
     IMG_InvertAlpha(true);
+#endif
     Create( IMG_Load(s) );
 
     //if ( surface_ )
@@ -515,8 +517,14 @@ void rISurfaceTexture::Upload( rSurface & surface )
         else
             format=GL_RGB5;
 
+#ifdef __EMSCRIPTEN__
+    glTexImage2D(GL_TEXTURE_2D, 0, format, tex->w, tex->h, 0,
+                 texformat, GL_UNSIGNED_BYTE, tex->pixels);
+    glGenerateMipmap(GL_TEXTURE_2D);
+#else
     gluBuild2DMipmaps(GL_TEXTURE_2D,format,tex->w,tex->h,
                       texformat,GL_UNSIGNED_BYTE,tex->pixels);
+#endif
 
     sr_UnlockSDL();
  #endif

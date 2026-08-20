@@ -117,7 +117,13 @@ public:
 #ifndef DEDICATED
     static void ArchiveKey( Archiver & archive, SDL_KeyboardEvent & key )
     {
+#ifdef __EMSCRIPTEN__
+        Uint8 scancode = static_cast< Uint8 >( key.keysym.scancode );
+        archive.Archive(key.state).Archive(scancode).Archive(key.keysym.sym).Archive(key.keysym.mod).Archive(key.keysym.unicode);
+        key.keysym.scancode = static_cast< SDL_Scancode >( scancode );
+#else
         archive.Archive(key.state).Archive(key.keysym.scancode).Archive(key.keysym.sym).Archive(key.keysym.mod).Archive(key.keysym.unicode);
+#endif
     }
 #endif
 
@@ -203,12 +209,21 @@ void EventArchiver< tRecordingBlock >::ArchiveKey( tRecordingBlock & archive, SD
         default:
             key.keysym.mod = KMOD_NONE;
             key.keysym.sym = SDLK_x;
+#ifdef __EMSCRIPTEN__
+            key.keysym.scancode = static_cast< SDL_Scancode >( 0 );
+#else
             key.keysym.scancode = 0;
+#endif
             key.keysym.unicode = '*';
         }
     }
 
+#ifdef __EMSCRIPTEN__
+    Uint8 scancode = static_cast< Uint8 >( key.keysym.scancode );
+    archive.Archive(key.state).Archive(scancode).Archive(key.keysym.sym).Archive(key.keysym.mod).Archive(key.keysym.unicode);
+#else
     archive.Archive(key.state).Archive(key.keysym.scancode).Archive(key.keysym.sym).Archive(key.keysym.mod).Archive(key.keysym.unicode);
+#endif
 }
 #endif
 
@@ -351,5 +366,4 @@ int su_InputThread(void *){
     return 0;
 }
 */
-
 

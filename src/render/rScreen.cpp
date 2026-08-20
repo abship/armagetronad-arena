@@ -402,7 +402,7 @@ static void sr_SetGLAttributes( int rDepth, int gDepth, int bDepth, int zDepth )
     SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, zDepth );
     SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
 
-#if SDL_VERSION_ATLEAST(1, 2, 10)
+#if SDL_VERSION_ATLEAST(1, 2, 10) && !defined(__EMSCRIPTEN__)
     // requires SDL 1.2.10
     switch (currentScreensetting.vSync)
     {
@@ -1187,4 +1187,3 @@ void rCallbackAfterScreenModeChange::Exec()
 {
     tCallback::Exec(sr_AfterAnchor);
 }
-

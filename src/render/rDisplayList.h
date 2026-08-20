@@ -67,7 +67,7 @@ public:
 
     bool IsSet() const
     {
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(__EMSCRIPTEN__)
         return list_ && !inhibit_;
 #else
         return false;
@@ -76,7 +76,7 @@ public:
 
     bool IsInhibited() const
     {
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(__EMSCRIPTEN__)
         return inhibit_;
 #else
         return false;
@@ -107,7 +107,7 @@ private:
     rDisplayList( rDisplayList const & );
     rDisplayList & operator = ( rDisplayList const & );
 
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(__EMSCRIPTEN__)
     GLuint list_;   //!< the display list
     int inhibit_;   //!< inhibit display list generation for a while
     bool filling_;  //!< set if we're just filling the list
@@ -146,12 +146,11 @@ private:
     rDisplayListFiller( rDisplayListFiller const & );
     rDisplayListFiller & operator = ( rDisplayListFiller const & );
 
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(__EMSCRIPTEN__)
     //! the list
     rDisplayList & list_;
 #endif
 };
 
 #endif
-
 

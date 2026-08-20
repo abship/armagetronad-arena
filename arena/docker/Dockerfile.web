@@ -1,0 +1,116 @@
+ARG BOOTSTRAP_IMAGE=docker.io/library/debian@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+ARG EMSDK_IMAGE=docker.io/emscripten/emsdk@sha256:71190e58eab340c692c0c3bb9741705f5c9625766a561c906dc6c01b1ed6d761
+FROM --platform=$TARGETPLATFORM ${BOOTSTRAP_IMAGE} AS autotools
+
+ARG DEBIAN_SNAPSHOT
+ARG AUTOCONF_VERSION
+ARG AUTOMAKE_VERSION
+ARG GXX_VERSION
+ARG LIBTOOL_VERSION
+ARG MAKE_VERSION
+ARG PKG_CONFIG_VERSION
+ARG PYTHON3_VERSION
+ARG ARENA_SOURCE_DATE_EPOCH
+ARG ARENA_SOURCE_TAG
+
+RUN sed -i \
+        -e "s#http://deb.debian.org/debian-security#http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}#" \
+        -e "s#http://deb.debian.org/debian#http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}#" \
+        /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Check-Valid-Until=false update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
+        autoconf=${AUTOCONF_VERSION} \
+        automake=${AUTOMAKE_VERSION} \
+        g++=${GXX_VERSION} \
+        libtool=${LIBTOOL_VERSION} \
+        make=${MAKE_VERSION} \
+        pkg-config=${PKG_CONFIG_VERSION} \
+        python3=${PYTHON3_VERSION} \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV SOURCE_DATE_EPOCH=${ARENA_SOURCE_DATE_EPOCH} \
+    CI_COMMIT_REF_PROTECTED=true \
+    CI_COMMIT_TAG=${ARENA_SOURCE_TAG}
+WORKDIR /src
+COPY . .
+RUN ./bootstrap.sh \
+    && for file in compile config.guess config.sub depcomp install-sh missing; do \
+        cp --remove-destination "$(readlink "$file")" "$file"; \
+    done
+
+FROM --platform=$TARGETPLATFORM ${EMSDK_IMAGE} AS build
+
+ARG LIBXML2_VERSION
+ARG LIBXML2_URL
+ARG LIBXML2_SHA256
+ARG ARENA_SOURCE_DATE_EPOCH
+ARG ARENA_SOURCE_TAG
+
+ENV SOURCE_DATE_EPOCH=${ARENA_SOURCE_DATE_EPOCH} \
+    CI_COMMIT_REF_PROTECTED=true \
+    CI_COMMIT_TAG=${ARENA_SOURCE_TAG}
+
+COPY --from=autotools /src /src
+
+RUN curl --fail --location --silent --show-error "$LIBXML2_URL" -o /tmp/libxml2.tar.xz \
+    && echo "$LIBXML2_SHA256  /tmp/libxml2.tar.xz" | sha256sum -c - \
+    && mkdir -p /deps/src /deps/libxml2 \
+    && tar -xJf /tmp/libxml2.tar.xz -C /deps/src
+
+RUN cp /src/config.sub "/deps/src/libxml2-${LIBXML2_VERSION}/config.sub" \
+    && cd "/deps/src/libxml2-${LIBXML2_VERSION}" \
+    && emconfigure ./configure \
+        --host=wasm32-unknown-emscripten \
+        --prefix=/deps/libxml2 \
+        --disable-shared \
+        --enable-static \
+        --without-debug \
+        --without-ftp \
+        --without-history \
+        --without-http \
+        --without-iconv \
+        --without-lzma \
+        --without-modules \
+        --without-python \
+        --without-readline \
+        --without-threads \
+        --without-zlib \
+    && emmake make -j1 \
+    && emmake make install
+
+WORKDIR /build
+
+RUN SDL_CONFIG=/src/arena/web/sdl-config \
+    PKG_CONFIG=/src/arena/web/pkg-config \
+    CFLAGS="-O2 -g0 -sUSE_SDL=1 -sUSE_LIBPNG=1 -sLEGACY_GL_EMULATION=1 -ffile-prefix-map=/src=. -ffile-prefix-map=/build=." \
+    CXXFLAGS="-O2 -g0 -sUSE_SDL=1 -sUSE_LIBPNG=1 -sLEGACY_GL_EMULATION=1 -ffile-prefix-map=/src=. -ffile-prefix-map=/build=." \
+    LDFLAGS="-O2 -sASYNCIFY=1 -sALLOW_MEMORY_GROWTH=1 -sASSERTIONS=1 -sENVIRONMENT=web,node -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1 -sLEGACY_GL_EMULATION=1 -sUSE_SDL=1 -sUSE_SDL_IMAGE=1 -sUSE_LIBPNG=1" \
+    emconfigure /src/configure \
+        --host=wasm32-unknown-emscripten \
+        --prefix=/arena-web \
+        --disable-authentication \
+        --disable-curl \
+        --disable-desktop \
+        --disable-etc \
+        --disable-games \
+        --disable-initscripts \
+        --disable-master \
+        --disable-memmanager \
+        --disable-migratestate \
+        --disable-music \
+        --disable-restoreold \
+        --disable-sysinstall \
+        --disable-uninstall \
+        --disable-useradd \
+    || { cat config.log; exit 1; }
+
+RUN emmake make -C src -j1 \
+        EXEEXT=.html \
+        LDFLAGS="-O2 -sASYNCIFY=1 -sALLOW_MEMORY_GROWTH=1 -sASSERTIONS=1 -sENVIRONMENT=web -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1 -sLEGACY_GL_EMULATION=1 -sUSE_SDL=1 -sUSE_SDL_IMAGE=1 -sUSE_LIBPNG=1 --pre-js /src/arena/web/pre.js --shell-file /src/arena/web/shell.html --preload-file /src/config@/data/config --preload-file /src/language@/data/language --preload-file /src/models@/data/models --preload-file /src/resource@/data/resource --preload-file /src/sound@/data/sound --preload-file /src/textures@/data/textures" \
+        armagetronad_main.html \
+    && mkdir /out \
+    && cp /build/src/armagetronad_main* /out/ \
+    && cp /src/COPYING.txt /out/
+
+FROM scratch AS artifact
+COPY --from=build /out/ /

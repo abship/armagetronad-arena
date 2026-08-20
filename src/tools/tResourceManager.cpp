@@ -65,16 +65,28 @@ public:
 #endif
 
 // server determined resource repository
+#ifdef __EMSCRIPTEN__
+tString tResourceManager::resRepoServer("");
+#else
 tString tResourceManager::resRepoServer("http://resource.armagetronad.net/resource/");
+#endif
 // the nSettingItem is in gStuff.cpp
 
 // client determined resource repository
+#ifdef __EMSCRIPTEN__
+tString tResourceManager::resRepoClient("");
+#else
 tString tResourceManager::resRepoClient("http://resource.armagetronad.net/resource/");
+#endif
 static tSettingItem<tString> conf_res_repo("RESOURCE_REPOSITORY_CLIENT", tResourceManager::resRepoClient);
 
 tResourceManager::Result tResourceManager::FetchURI(const char* URI, std::ostream& o)
 {
-#ifdef LIBCURL_PROTOCOL_HTTP
+#ifdef __EMSCRIPTEN__
+    (void) URI;
+    (void) o;
+    return Result::ERROR_Uri;
+#elif defined(LIBCURL_PROTOCOL_HTTP)
     {
         tCurlLocal handle;
         if (nullptr == handle)
@@ -338,4 +350,3 @@ static void RInclude(std::istream& s)
 }
 
 static tConfItemFunc s_RInclude("RINCLUDE",  &RInclude);
-

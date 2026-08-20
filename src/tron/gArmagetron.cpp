@@ -462,7 +462,11 @@ static void sg_DelayedActivation()
     Activate( sg_active );
 }
 
+#ifdef __EMSCRIPTEN__
+int filter(void *, SDL_Event *tEvent){
+#else
 int filter(const SDL_Event *tEvent){
+#endif
     // recursion avoidance
     static bool recursion = false;
     if ( !recursion )
@@ -811,7 +815,12 @@ int main(int argc,char **argv){
 
             sr_glRendererInit();
 
+#ifdef __EMSCRIPTEN__
+            // The bundled browser SDL API declares but does not implement
+            // event filters. Events are consumed by the regular poll loop.
+#else
             SDL_SetEventFilter(&filter);
+#endif
 
             //std::cout << "set filter\n";
 
@@ -958,6 +967,4 @@ static tConfItemFunc st_Dummy11("MASTER_SAVE_INTERVAL", &st_Dummy);
 static tConfItemFunc st_Dummy12("MASTER_IDLE", &st_Dummy);
 static tConfItemFunc st_Dummy13("MASTER_PORT", &st_Dummy);
 #endif
-
-
 

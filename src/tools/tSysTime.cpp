@@ -33,6 +33,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "tConfiguration.h"
 #include "tLocale.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 //! time structure
 struct tTime
 {
@@ -371,6 +375,10 @@ void tAdvanceFrame( int usecdelay )
             st_Breakpoint();
         }
     }
+#endif
+
+#ifdef __EMSCRIPTEN__
+    emscripten_sleep( 0 );
 #endif
 }
 

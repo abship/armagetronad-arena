@@ -10,6 +10,22 @@
 
 #define NO_SDL_GLEXT
 #include <SDL_opengl.h>
+#ifdef __EMSCRIPTEN__
+#include <GL/glu.h>
+
+#define glTexCoord2d( x, y ) glTexCoord2f( static_cast< GLfloat >( x ), static_cast< GLfloat >( y ) )
+#define glTexCoord3fv( v ) glTexCoord2f( (v)[0], (v)[1] )
+inline void sr_glRectf( GLfloat x1, GLfloat y1, GLfloat x2, GLfloat y2 )
+{
+    glBegin( GL_QUADS );
+    glVertex2f( x1, y1 );
+    glVertex2f( x2, y1 );
+    glVertex2f( x2, y2 );
+    glVertex2f( x1, y2 );
+    glEnd();
+}
+#define glRectf( x1, y1, x2, y2 ) sr_glRectf( x1, y1, x2, y2 )
+#endif
 
 /*
 // include OpenGL header

@@ -522,12 +522,20 @@ GENERICUNIX
 
 SDL_CONFIG_DEFAULT=sdl-config
 macosx=false
+emscripten=false
 OBJC="not_needed_on_this_platform"
 
 dnl *************************************************
 dnl GL AND  MATHLIB SELECTION ( SYSTEM DEPENDANT)
 dnl *************************************************
 case "$target" in
+    wasm32-*-emscripten*)
+        emscripten=true
+        MATHLIB=""
+        SYS_GL_LIB=""
+        SYS_GLU_LIB=""
+        AC_DEFINE(DONTUSEMEMMANAGER, 1, [Define if you dont want to use a custom memory manager.])
+        ;;
     *-*-cygwin* | *-*-mingw32*)
 	AC_DEFINE(WIN32, 1, [Windows 9x/NT/2k/XP])
         MATHLIB=""
@@ -592,6 +600,7 @@ AC_PROG_OBJC
 test -z "$SDL_CONFIG" && SDL_CONFIG=$SDL_CONFIG_DEFAULT
 
 AM_CONDITIONAL(MACOSX, test x$macosx = xtrue)
+AM_CONDITIONAL(EMSCRIPTEN, test x$emscripten = xtrue)
 
 AC_SUBST(docstyle)
 
@@ -624,7 +633,8 @@ if test x$armamain = xtrue; then
   LIBS="$LIBS $XML2_LIBS"
   AC_DEFINE(HAVE_LIBXML2, 1, [Define if you have the libxml2 library])
 
-  AC_CHECK_DECL(LIBXML_HTTP_ENABLED,,
+  if test x$emscripten != xtrue; then
+   AC_CHECK_DECL(LIBXML_HTTP_ENABLED,,
                dnl no nanoHTTP, auto-enable curl (if not explicitly disabled)
                if test x$use_curl = xfalse; then
                    AC_MSG_ERROR([[libxml2 does not have the http client compiled in. Curl replacement needed, do not disable it.]])
@@ -633,6 +643,7 @@ if test x$armamain = xtrue; then
                fi
                ,
                [[#include "libxml/nanohttp.h"]])
+  fi
 
 dnl *************************************************
 dnl         curl
@@ -815,11 +826,15 @@ dnl	libjpeg not found. Expect small graphical errors ( missing moviepack title s
 dnl	)
 dnl )
 
-AC_CHECK_LIB(SDL_image, IMG_Load,,
+if test x$emscripten = xtrue; then
+ AC_DEFINE(HAVE_LIBSDL_IMAGE, 1, [Define if you have the SDL_image library (-lSDL_image).])
+else
+ AC_CHECK_LIB(SDL_image, IMG_Load,,
 dnl AC_CHECK_LIB(IMG, main,,
 AC_MSG_ERROR([You need the library SDL_image to compile ${progtitle}.]
 dnl )
 ))
+fi
 
 dnl look for the right header for SDL_image
 AC_CHECK_HEADERS(SDL_image.h,,
@@ -1125,4 +1140,3 @@ if test "x$OUTSIDE_OF_PREFIX" = "xyes"; then
     echo "  of this warning, pass the corresponding opposite switches."
     echo ""
 fi
-
