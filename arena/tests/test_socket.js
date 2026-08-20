@@ -19,6 +19,9 @@ class FakeWebSocket {
   }
   send(data) { this.sent.push(Uint8Array.from(data)); }
   close(code, reason) {
+    if (code !== 1000 && (code < 3000 || code > 4999)) {
+      throw new Error('browser rejected WebSocket close code ' + code);
+    }
     this.closed = [code, reason];
     this.readyState = FakeWebSocket.CLOSED;
   }
@@ -81,14 +84,14 @@ function latest() { return instances[instances.length - 1]; }
   transport.send(id, new Uint8Array([1]));
   latest().open();
   latest().onmessage({ data: new Uint8Array(2049).buffer });
-  assert.strictEqual(1009, latest().closed[0]);
+  assert.strictEqual(4009, latest().closed[0]);
   transport.close(id);
 
   id = transport.create();
   transport.send(id, new Uint8Array([1]));
   latest().open();
   latest().onmessage({ data: 'text' });
-  assert.strictEqual(1003, latest().closed[0]);
+  assert.strictEqual(4003, latest().closed[0]);
   transport.close(id);
 })();
 
@@ -101,7 +104,7 @@ function latest() { return instances[instances.length - 1]; }
   }
   assert.strictEqual(32768, transport._socketForTest(id).incomingBytes);
   latest().onmessage({ data: new Uint8Array([1]).buffer });
-  assert.strictEqual(1008, latest().closed[0]);
+  assert.strictEqual(4008, latest().closed[0]);
   transport.close(id);
 })();
 
@@ -109,11 +112,11 @@ function latest() { return instances[instances.length - 1]; }
   var id = transport.create();
   transport.send(id, new Uint8Array([1]));
   latest().open();
-  for (var index = 0; index < 32; ++index) {
+  for (var index = 0; index < 128; ++index) {
     latest().onmessage({ data: new Uint8Array([1]).buffer });
   }
   latest().onmessage({ data: new Uint8Array([2]).buffer });
-  assert.strictEqual(1008, latest().closed[0]);
+  assert.strictEqual(4008, latest().closed[0]);
   transport.close(id);
 })();
 
@@ -123,7 +126,7 @@ function latest() { return instances[instances.length - 1]; }
   latest().open();
   latest().bufferedAmount = 32768;
   assert.strictEqual(-1, transport.send(id, new Uint8Array([2])));
-  assert.strictEqual(1008, latest().closed[0]);
+  assert.strictEqual(4008, latest().closed[0]);
   transport.close(id);
 })();
 
@@ -133,7 +136,7 @@ function latest() { return instances[instances.length - 1]; }
   now = 1001;
   latest().open();
   assert.strictEqual(0, latest().sent.length);
-  assert.strictEqual(1008, latest().closed[0]);
+  assert.strictEqual(4008, latest().closed[0]);
   transport.close(id);
 })();
 
@@ -144,7 +147,7 @@ function latest() { return instances[instances.length - 1]; }
   latest().bufferedAmount = 32768;
   latest().open();
   assert.strictEqual(0, latest().sent.length);
-  assert.strictEqual(1008, latest().closed[0]);
+  assert.strictEqual(4008, latest().closed[0]);
   transport.close(id);
 })();
 

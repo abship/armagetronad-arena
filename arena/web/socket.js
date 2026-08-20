@@ -6,7 +6,8 @@
   'use strict';
 
   var MAX_DATAGRAM = 2048;
-  var MAX_QUEUE_COUNT = 32;
+  var MAX_OUTGOING_QUEUE_COUNT = 32;
+  var MAX_INCOMING_QUEUE_COUNT = 128;
   var MAX_QUEUE_BYTES = 32768;
   var HIGH_BUFFERED_BYTES = 16384;
   var MAX_BUFFERED_BYTES = 32768;
@@ -32,14 +33,14 @@
   function checkBackpressure(socket, additional) {
     var amount = socket.ws.bufferedAmount + additional;
     if (amount > MAX_BUFFERED_BYTES) {
-      fail(socket, 1008, 'relay backlog');
+      fail(socket, 4008, 'relay backlog');
       return false;
     }
     if (amount > HIGH_BUFFERED_BYTES && !socket.backpressureTimer) {
       socket.backpressureTimer = setTimeout(function() {
         socket.backpressureTimer = 0;
         if (socket.ws && socket.ws.bufferedAmount > HIGH_BUFFERED_BYTES) {
-          fail(socket, 1008, 'stale relay backlog');
+          fail(socket, 4008, 'stale relay backlog');
         }
       }, MAX_AGE_MS);
     }
@@ -60,7 +61,7 @@
     ws.binaryType = 'arraybuffer';
     ws.onopen = function() {
       if (ws.protocol !== 'arena-datagram-v1') {
-        fail(socket, 1002, 'relay protocol not selected');
+        fail(socket, 4002, 'relay protocol not selected');
         return;
       }
       var pending = socket.outgoing;
@@ -69,7 +70,7 @@
       for (var index = 0; index < pending.length; ++index) {
         if (now() - pending[index].queuedAt > MAX_AGE_MS ||
             !checkBackpressure(socket, pending[index].data.length)) {
-          fail(socket, 1008, 'stale relay control');
+          fail(socket, 4008, 'stale relay control');
           return;
         }
         ws.send(pending[index].data);
@@ -79,17 +80,17 @@
     };
     ws.onmessage = function(event) {
       if (!(event.data instanceof ArrayBuffer)) {
-        fail(socket, 1003, 'binary datagrams required');
+        fail(socket, 4003, 'binary datagrams required');
         return;
       }
       var datagram = new Uint8Array(event.data);
       if (datagram.length > MAX_DATAGRAM) {
-        fail(socket, 1009, 'datagram too large');
+        fail(socket, 4009, 'datagram too large');
         return;
       }
-      if (socket.incoming.length >= MAX_QUEUE_COUNT ||
+      if (socket.incoming.length >= MAX_INCOMING_QUEUE_COUNT ||
           socket.incomingBytes + datagram.length > MAX_QUEUE_BYTES) {
-        fail(socket, 1008, 'receive backlog');
+        fail(socket, 4008, 'receive backlog');
         return;
       }
       socket.incoming.push({ data: datagram, queuedAt: now() });
@@ -133,9 +134,9 @@
         return datagram.length;
       }
       if (socket.ws.readyState !== WebSocket.CONNECTING ||
-          socket.outgoing.length >= MAX_QUEUE_COUNT ||
+          socket.outgoing.length >= MAX_OUTGOING_QUEUE_COUNT ||
           socket.outgoingBytes + datagram.length > MAX_QUEUE_BYTES) {
-        fail(socket, 1008, 'send backlog');
+        fail(socket, 4008, 'send backlog');
         return -1;
       }
       socket.outgoing.push({ data: datagram, queuedAt: now() });
@@ -149,7 +150,7 @@
       var queued = socket.incoming.shift();
       socket.incomingBytes -= queued.data.length;
       if (now() - queued.queuedAt > MAX_AGE_MS) {
-        fail(socket, 1008, 'stale relay control');
+        fail(socket, 4008, 'stale relay control');
         return null;
       }
       return queued.data;
