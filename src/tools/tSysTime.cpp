@@ -270,7 +270,12 @@ void tAdvanceFrameSys( tTime & start, tTime & relative )
         if ( warn )
         {
             warn = false;
+#ifndef __EMSCRIPTEN__
+            // Browser startup can suspend the main loop while assets and the
+            // relay open. Avoid recursively printing from an active console
+            // render; the clock correction immediately below is unchanged.
             con << tOutput( "$timer_hickup", float( timeStep.seconds + timeStep.microseconds * 1E-6  ) );
+#endif
         }
 
         start = start + timeStep;
