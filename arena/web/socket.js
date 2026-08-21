@@ -94,7 +94,11 @@
         fail(socket, 4008, 'receive backlog');
         return;
       }
-      socket.incoming.push({ data: datagram, queuedAt: now() });
+      // These are authoritative server-state datagrams, not player controls.
+      // Keep them byte/count bounded above, then let the upstream receive loop
+      // drain every accepted datagram even if processing a round transition is
+      // slower than the outgoing control freshness window.
+      socket.incoming.push({ data: datagram });
       socket.incomingBytes += datagram.length;
       socket.receivedDatagrams += 1;
       socket.receivedBytes += datagram.length;
@@ -160,10 +164,6 @@
       if (!socket || !socket.incoming.length) return null;
       var queued = socket.incoming.shift();
       socket.incomingBytes -= queued.data.length;
-      if (now() - queued.queuedAt > MAX_AGE_MS) {
-        fail(socket, 4008, 'stale relay control');
-        return null;
-      }
       return queued.data;
     },
 

@@ -349,7 +349,7 @@ def main():
             evidence.append({
                 "player": player,
                 "action": key_name,
-                "actionCount": 4 if number == 0 else 1,
+                "actionCount": 1,
                 "canvasElement": canvas,
                 "initialState": state,
             })
@@ -384,18 +384,32 @@ def main():
                 45,
                 player + " rendered arena before W3C turn",
             )
-        for index, (session, _player) in enumerate(sessions):
-            canvas = evidence[index]["canvasElement"]
-            key_value = "\ue012" if index == 0 else "\ue014"
-            send_turn_action(args.webdriver_url, session, canvas, key_value)
-        for _turn in range(3):
-            time.sleep(0.35)
-            send_turn_action(
-                args.webdriver_url,
-                sessions[0][0],
-                evidence[0]["canvasElement"],
-                "\ue012",
-            )
+        # Queue player 2's real turn for spawn, then wait for the authoritative
+        # death before delivering player 1's required action. Sending both turns
+        # during the countdown makes the symmetric upstream spawns tie.
+        send_turn_action(
+            args.webdriver_url,
+            sessions[1][0],
+            evidence[1]["canvasElement"],
+            "\ue014",
+        )
+
+        def second_player_death():
+            text = server_result()
+            if text is None:
+                return None
+            return text if any(
+                "DEATH_SUICIDE" in line and players[1] in line
+                for line in text.splitlines()
+            ) else None
+
+        wait_for(second_player_death, 60, players[1] + " authoritative turn death")
+        send_turn_action(
+            args.webdriver_url,
+            sessions[0][0],
+            evidence[0]["canvasElement"],
+            "\ue012",
+        )
 
         def authoritative_result():
             text = server_result()

@@ -121,6 +121,19 @@ function latest() { return instances[instances.length - 1]; }
   transport.close(id);
 })();
 
+(function drainsAcceptedServerStateAfterSlowRoundTransition() {
+  now = 0;
+  var id = transport.create();
+  transport.send(id, new Uint8Array([1]));
+  latest().open();
+  latest().onmessage({ data: Uint8Array.from([4, 3, 2, 1]).buffer });
+  now = 1001;
+  assert.deepStrictEqual(Array.from(transport.receive(id)), [4, 3, 2, 1]);
+  assert.strictEqual(0, transport._socketForTest(id).incomingBytes);
+  assert.strictEqual(0, transport.status().failed);
+  transport.close(id);
+})();
+
 (function closesOnBufferedBackpressure() {
   var id = transport.create();
   transport.send(id, new Uint8Array([1]));
@@ -132,6 +145,7 @@ function latest() { return instances[instances.length - 1]; }
 })();
 
 (function closesInsteadOfFlushingStaleControls() {
+  now = 0;
   var id = transport.create();
   transport.send(id, new Uint8Array([7]));
   now = 1001;
