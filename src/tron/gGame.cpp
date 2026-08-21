@@ -85,9 +85,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
-EM_JS( void, sg_ArenaSetClientStage,
-       ( const char * stage, int player, int object, int alive ), {
+EM_JS( void, sg_ArenaSetClientStage, ( const char * stage ), {
     Module['arenaClientStage'] = UTF8ToString(stage);
+} );
+EM_JS( void, sg_ArenaSetLocalObjectStatus,
+       ( int player, int object, int alive ), {
     var status = Module['arenaInputStatus'];
     if (!status) return;
     status['localPlayerPresent'] = !!player;
@@ -4265,11 +4267,13 @@ bool gGame::GameLoop(bool input){
     // game state, timing, and simulation remain owned by the C++ client.
     bool const live = state == GS_PLAY && gtime >= 0;
     ePlayer * arenaLocal = ePlayer::PlayerConfig( 0 );
-    ePlayerNetID * arenaNetPlayer = arenaLocal ? arenaLocal->netPlayer : NULL;
+    ePlayerNetID * arenaNetPlayer = NULL;
+    if ( arenaLocal )
+        arenaNetPlayer = arenaLocal->netPlayer;
     eNetGameObject * arenaObject = arenaNetPlayer ? arenaNetPlayer->Object() : NULL;
-    sg_ArenaSetClientStage( live ? "game-live" : "game-transition",
-                            arenaNetPlayer != NULL, arenaObject != NULL,
-                            arenaObject && arenaObject->Alive() );
+    sg_ArenaSetClientStage( live ? "game-live" : "game-transition" );
+    sg_ArenaSetLocalObjectStatus( arenaNetPlayer != NULL, arenaObject != NULL,
+                                  arenaObject && arenaObject->Alive() );
 #endif
     //con << sg_netPlayerWalls.Len() << '\n';
 
