@@ -74,6 +74,7 @@ done
 
 docker stop -t 10 arena-native >/dev/null
 docker wait arena-native >/dev/null 2>&1 || true
+grep '^GAME_END ' "$runtime_dir/server/ladderlog.txt" >"$runtime_dir/evidence/game-end.log"
 
 (
     cd "$runtime_dir"

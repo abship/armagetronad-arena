@@ -344,6 +344,7 @@ def main():
             evidence.append({
                 "player": player,
                 "action": key_name,
+                "actionCount": 4 if number == 0 else 1,
                 "canvasElement": canvas,
                 "initialState": state,
             })
@@ -370,7 +371,6 @@ def main():
 
         wait_for(players_ready, 45, "both authoritative team entries")
         for index, (session, player) in enumerate(sessions):
-            canvas = evidence[index]["canvasElement"]
             evidence[index]["actionRender"] = wait_for(
                 lambda session=session: inspect_canvas(
                     args.webdriver_url, session
@@ -378,8 +378,20 @@ def main():
                 45,
                 player + " rendered arena before W3C turn",
             )
+
+        time.sleep(4)
+        for index, (session, _player) in enumerate(sessions):
+            canvas = evidence[index]["canvasElement"]
             key_value = "\ue012" if index == 0 else "\ue014"
             send_turn_action(args.webdriver_url, session, canvas, key_value)
+        for _turn in range(3):
+            time.sleep(0.35)
+            send_turn_action(
+                args.webdriver_url,
+                sessions[0][0],
+                evidence[0]["canvasElement"],
+                "\ue012",
+            )
 
         def authoritative_result():
             text = server_result()
@@ -390,10 +402,13 @@ def main():
                 any("PLAYER_ENTERED" in line and player in line for line in lines)
                 for player in players
             )
-            finished = "MATCH_WINNER" in text and "GAME_END" in text
+            finished = any(
+                "MATCH_WINNER" in line and any(player in line for player in players)
+                for line in lines
+            )
             return text if entered and finished else None
 
-        result = wait_for(authoritative_result, args.timeout, "authoritative 1v1 result")
+        result = wait_for(authoritative_result, args.timeout, "authoritative live-client 1v1 winner")
         (evidence_dir / (args.browser + "-result.log")).write_text(result, encoding="utf-8")
         for index, (session, player) in enumerate(sessions):
             final_state = wait_for_state(
@@ -402,6 +417,8 @@ def main():
                 15,
                 player + " bidirectional datagram traffic",
                 lambda value: value.get("transport") and
+                value["transport"].get("open", 0) >= 1 and
+                value["transport"].get("failed", 0) == 0 and
                 value["transport"].get("sentDatagrams", 0) > 0 and
                 value["transport"].get("receivedDatagrams", 0) > 0,
             )
@@ -425,9 +442,14 @@ def main():
         )
     except Exception:
         diagnostics = []
-        for session, player in sessions:
+        for index, (session, player) in enumerate(sessions):
             try:
-                diagnostics.append({"player": player, "state": browser_state(args.webdriver_url, session)})
+                diagnostic = {"player": player, "state": browser_state(args.webdriver_url, session)}
+                if index < len(evidence):
+                    diagnostic["action"] = evidence[index].get("action")
+                    diagnostic["actionCount"] = evidence[index].get("actionCount")
+                    diagnostic["actionRender"] = evidence[index].get("actionRender")
+                diagnostics.append(diagnostic)
                 screenshot = request(
                     args.webdriver_url, "GET", "/session/{0}/screenshot".format(session)
                 )["value"]

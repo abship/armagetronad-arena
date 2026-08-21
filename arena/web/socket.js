@@ -21,6 +21,7 @@
 
   function fail(socket, code, reason) {
     socket.failed = true;
+    socket.failureReason = reason;
     if (socket.backpressureTimer) {
       clearTimeout(socket.backpressureTimer);
       socket.backpressureTimer = 0;
@@ -98,8 +99,17 @@
       socket.receivedDatagrams += 1;
       socket.receivedBytes += datagram.length;
     };
-    ws.onerror = function() { socket.failed = true; };
-    ws.onclose = function() { socket.failed = true; };
+    ws.onerror = function() {
+      socket.failed = true;
+      if (!socket.failureReason) socket.failureReason = 'websocket error';
+    };
+    ws.onclose = function(event) {
+      socket.failed = true;
+      if (!socket.failureReason) {
+        socket.failureReason = 'websocket close ' + event.code +
+          (event.reason ? ': ' + event.reason : '');
+      }
+    };
     return true;
   }
 
@@ -113,6 +123,7 @@
         outgoingBytes: 0,
         ws: null,
         failed: false,
+        failureReason: null,
         backpressureTimer: 0,
         sentDatagrams: 0,
         sentBytes: 0,
@@ -172,6 +183,7 @@
         count: 0,
         open: 0,
         failed: 0,
+        failureReason: null,
         sentDatagrams: 0,
         sentBytes: 0,
         receivedDatagrams: 0,
@@ -180,7 +192,10 @@
       Object.keys(sockets).forEach(function(id) {
         var socket = sockets[id];
         status.count += 1;
-        if (socket.failed) status.failed += 1;
+        if (socket.failed) {
+          status.failed += 1;
+          if (!status.failureReason) status.failureReason = socket.failureReason;
+        }
         if (socket.ws && socket.ws.readyState === WebSocket.OPEN) status.open += 1;
         status.sentDatagrams += socket.sentDatagrams;
         status.sentBytes += socket.sentBytes;

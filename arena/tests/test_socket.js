@@ -85,6 +85,7 @@ function latest() { return instances[instances.length - 1]; }
   latest().open();
   latest().onmessage({ data: new Uint8Array(2049).buffer });
   assert.strictEqual(4009, latest().closed[0]);
+  assert.strictEqual('datagram too large', transport.status().failureReason);
   transport.close(id);
 
   id = transport.create();
