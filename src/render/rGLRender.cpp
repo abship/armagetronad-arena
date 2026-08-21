@@ -113,10 +113,17 @@ public:
 
 
     virtual void Color(REAL r, REAL g, REAL b){
+#ifdef __EMSCRIPTEN__
+        // The legacy GL emulator cannot append a color change to a retained quad batch.
+        if ( lastPrimitive == GL_QUADS ) End(true);
+#endif
         glColor3f(r,g,b);
     };
 
     virtual void Color(REAL r, REAL g, REAL b,REAL a){
+#ifdef __EMSCRIPTEN__
+        if ( lastPrimitive == GL_QUADS ) End(true);
+#endif
         glColor4f(r,g,b,a);
     };
 

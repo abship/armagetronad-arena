@@ -112,6 +112,15 @@ def send_turn_action(base, session, canvas, key):
     request(base, "DELETE", "/session/{0}/actions".format(session))
 
 
+def inspect_canvas(base, session, canvas):
+    screenshot = request(
+        base,
+        "GET",
+        "/session/{0}/element/{1}/screenshot".format(session, canvas),
+    )["value"]
+    return inspect_png(base64.b64decode(screenshot))
+
+
 def paeth(left, above, upper_left):
     estimate = left + above - upper_left
     left_distance = abs(estimate - left)
@@ -332,8 +341,6 @@ def main():
             )
             canvas = find_element(args.webdriver_url, session, "#canvas")
             key_name = "ArrowLeft" if number == 0 else "ArrowRight"
-            key_value = "\ue012" if number == 0 else "\ue014"
-            send_turn_action(args.webdriver_url, session, canvas, key_value)
             evidence.append({
                 "player": player,
                 "action": key_name,
@@ -343,12 +350,41 @@ def main():
 
         players = [player for _, player in sessions]
 
-        def authoritative_result():
+        def server_result():
             if not server_log.exists():
                 return None
             with server_log.open("r", encoding="utf-8", errors="replace") as source:
                 source.seek(initial_log_size)
-                text = source.read()
+                return source.read()
+
+        def players_ready():
+            text = server_result()
+            if text is None:
+                return None
+            lines = text.splitlines()
+            ready = all(
+                any("TEAM_PLAYER_ADDED" in line and player in line for line in lines)
+                for player in players
+            )
+            return text if ready else None
+
+        wait_for(players_ready, 45, "both authoritative team entries")
+        for index, (session, player) in enumerate(sessions):
+            canvas = evidence[index]["canvasElement"]
+            evidence[index]["actionRender"] = wait_for(
+                lambda session=session, canvas=canvas: inspect_canvas(
+                    args.webdriver_url, session, canvas
+                ),
+                45,
+                player + " rendered arena before W3C turn",
+            )
+            key_value = "\ue012" if index == 0 else "\ue014"
+            send_turn_action(args.webdriver_url, session, canvas, key_value)
+
+        def authoritative_result():
+            text = server_result()
+            if text is None:
+                return None
             lines = text.splitlines()
             entered = all(
                 any("PLAYER_ENTERED" in line and player in line for line in lines)

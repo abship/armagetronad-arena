@@ -278,7 +278,13 @@ void rModel::Render(){
             texcoord=false;
         if (modelTexFaces.Len()!=modelFaces.Len())
             texcoord=false;
-        if ( !modelTexFacesCoherent )
+        bool useIndexedRendering = modelTexFacesCoherent;
+#ifdef __EMSCRIPTEN__
+        // Legacy GL only emulates client-side 16-bit element indices.
+        useIndexedRendering = false;
+#endif
+
+        if ( !useIndexedRendering )
             texcoord=false;
 
         if (texcoord)
@@ -289,7 +295,7 @@ void rModel::Render(){
 
            
 
-        if ( !modelTexFacesCoherent )
+        if ( !useIndexedRendering )
         {
             rDisplayListFiller filler( displayList_, false );
             glEnable(GL_CULL_FACE);
@@ -379,8 +385,6 @@ void rModel::ClearCache()
 
     sr_modelCache.clear();
 }
-
-
 
 
 
