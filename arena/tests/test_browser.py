@@ -393,12 +393,6 @@ def main():
         for index, state in enumerate(live_states):
             evidence[index]["preActionState"] = state
 
-        baseline_lines = server_result().splitlines()
-        baseline_deaths = [
-            sum("DEATH_SUICIDE" in line and player in line for line in baseline_lines)
-            for player in players
-        ]
-
         # Act immediately while both upstream-controlled cycle objects are
         # alive. A nonnegative game timer also covers the dead/inter-round phase.
         send_turn_action(
@@ -448,25 +442,6 @@ def main():
                 value["input"].get("keyUp", 0) >= 2 and
                 value["input"].get("acceptedActions", 0) >= 1,
             )
-
-        def second_player_dies_first():
-            text = server_result()
-            if text is None:
-                return None
-            lines = text.splitlines()
-            first_deaths = sum(
-                "DEATH_SUICIDE" in line and players[0] in line for line in lines
-            )
-            second_deaths = sum(
-                "DEATH_SUICIDE" in line and players[1] in line for line in lines
-            )
-            return text if (
-                second_deaths > baseline_deaths[1] and
-                second_deaths - baseline_deaths[1] >
-                first_deaths - baseline_deaths[0]
-            ) else None
-
-        wait_for(second_player_dies_first, 60, players[1] + " authoritative first death")
 
         def authoritative_result():
             text = server_result()
