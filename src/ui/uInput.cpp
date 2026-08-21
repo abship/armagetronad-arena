@@ -34,6 +34,30 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "uMenu.h"
 #include "tSysTime.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+
+EM_JS( void, su_ArenaRecordSDLKey, ( int down, int sym, int bound ), {
+    var status = Module['arenaInputStatus'];
+    if (!status) return;
+    if (down) status['sdlKeyDown'] += 1;
+    else status['sdlKeyUp'] += 1;
+    status['lastSDLKey'] = sym;
+    status['lastSDLBound'] = !!bound;
+} );
+
+EM_JS( void, su_ArenaRecordPlayerAction,
+       ( const char * action, int player, double value, int accepted ), {
+    var status = Module['arenaInputStatus'];
+    if (!status) return;
+    status['playerActions'] += 1;
+    status['lastAction'] = UTF8ToString(action).slice(0, 64);
+    status['lastActionPlayer'] = player;
+    status['lastActionValue'] = value;
+    status['lastActionAccepted'] = !!accepted;
+} );
+#endif
+
 bool su_mouseGrab = false;
 
 static uAction* su_allActions[uMAX_ACTIONS];
@@ -664,6 +688,13 @@ bool su_HandleEvent(SDL_Event &e, bool delayed ){
     default:
         break;
     }
+#ifdef __EMSCRIPTEN__
+    if ( e.type == SDL_KEYDOWN || e.type == SDL_KEYUP )
+    {
+        su_ArenaRecordSDLKey( e.type == SDL_KEYDOWN, sym,
+                              sym >= 0 && sym < SDLK_NEWLAST && keymap[sym] );
+    }
+#endif
     if (sym>=0 && keymap[sym]){
         REAL realpm=pm;
         if (keymap[sym]->act->type==uAction::uINPUT_ANALOG)
@@ -773,6 +804,11 @@ bool uBindPlayer::DoActivate(REAL x){
         ret = GlobalAct(act,x);
     else
         ret = uPlayerPrototype::PlayerConfig(ePlayer-1)->Act(act,x);
+
+#ifdef __EMSCRIPTEN__
+    su_ArenaRecordPlayerAction( act ? (const char *)act->internalName : "",
+                                ePlayer, x, ret );
+#endif
 
     if( ret && act && act->GetTooltip() && x > 0 )
     {

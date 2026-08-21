@@ -30,7 +30,16 @@ var arenaInputStatus = Module['arenaInputStatus'] = {
   keyUp: 0,
   lastKey: '',
   lastCode: '',
-  lastKeyCode: 0
+  lastKeyCode: 0,
+  sdlKeyDown: 0,
+  sdlKeyUp: 0,
+  lastSDLKey: 0,
+  lastSDLBound: false,
+  playerActions: 0,
+  lastAction: '',
+  lastActionPlayer: 0,
+  lastActionValue: 0,
+  lastActionAccepted: false
 };
 function arenaRecordKey(event) {
   if (event.type === 'keydown') arenaInputStatus.keyDown += 1;
