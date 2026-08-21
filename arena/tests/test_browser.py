@@ -348,8 +348,8 @@ def main():
             key_name = "ArrowLeft" if number == 0 else "ArrowRight"
             evidence.append({
                 "player": player,
-                "action": key_name,
-                "actionCount": 1,
+                "action": key_name + "," + ("ArrowRight" if number == 0 else "ArrowLeft"),
+                "actionCount": 2,
                 "canvasElement": canvas,
                 "initialState": state,
             })
@@ -384,32 +384,63 @@ def main():
                 45,
                 player + " rendered arena before W3C turn",
             )
-        # Queue player 2's real turn for spawn, then wait for the authoritative
-        # death before delivering player 1's required action. Sending both turns
-        # during the countdown makes the symmetric upstream spawns tie.
+        for session, player in sessions:
+            wait_for_state(
+                args.webdriver_url,
+                session,
+                60,
+                player + " live upstream game timer",
+                lambda value: value.get("stage") == "game-live" and
+                value.get("transport") and
+                value["transport"].get("open", 0) >= 1 and
+                value["transport"].get("failed", 0) == 0,
+            )
+
+        # Both clients exercise real controls during live upstream play. Player
+        # 2's short S-turn returns to its original line first; player 1's longer
+        # S-turn extends its path so the authoritative server resolves the duel
+        # instead of repeating the symmetric straight-line tie.
         send_turn_action(
             args.webdriver_url,
             sessions[1][0],
             evidence[1]["canvasElement"],
             "\ue014",
         )
-
-        def second_player_death():
-            text = server_result()
-            if text is None:
-                return None
-            return text if any(
-                "DEATH_SUICIDE" in line and players[1] in line
-                for line in text.splitlines()
-            ) else None
-
-        wait_for(second_player_death, 60, players[1] + " authoritative turn death")
+        time.sleep(0.35)
+        send_turn_action(
+            args.webdriver_url,
+            sessions[1][0],
+            evidence[1]["canvasElement"],
+            "\ue012",
+        )
         send_turn_action(
             args.webdriver_url,
             sessions[0][0],
             evidence[0]["canvasElement"],
             "\ue012",
         )
+        time.sleep(1.5)
+        send_turn_action(
+            args.webdriver_url,
+            sessions[0][0],
+            evidence[0]["canvasElement"],
+            "\ue014",
+        )
+
+        def second_player_dies_first():
+            text = server_result()
+            if text is None:
+                return None
+            lines = text.splitlines()
+            first_deaths = sum(
+                "DEATH_SUICIDE" in line and players[0] in line for line in lines
+            )
+            second_deaths = sum(
+                "DEATH_SUICIDE" in line and players[1] in line for line in lines
+            )
+            return text if second_deaths > first_deaths else None
+
+        wait_for(second_player_dies_first, 60, players[1] + " authoritative first death")
 
         def authoritative_result():
             text = server_result()

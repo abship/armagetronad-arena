@@ -4252,6 +4252,19 @@ bool gGame::GameLoop(bool input){
             con.CenterDisplay(s,0);
         }
     }
+
+#ifdef __EMSCRIPTEN__
+    // Let the browser harness deliver controls only after the authoritative
+    // upstream game timer leaves the countdown. This is observability only;
+    // game state, timing, and simulation remain owned by the C++ client.
+    static bool arenaGameLive = false;
+    bool const live = state == GS_PLAY && gtime >= 0;
+    if ( live != arenaGameLive )
+    {
+        sg_ArenaSetClientStage( live ? "game-live" : "game-transition" );
+        arenaGameLive = live;
+    }
+#endif
     //con << sg_netPlayerWalls.Len() << '\n';
 
 #ifndef DEDICATED
