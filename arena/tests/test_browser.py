@@ -112,11 +112,11 @@ def send_turn_action(base, session, canvas, key):
     request(base, "DELETE", "/session/{0}/actions".format(session))
 
 
-def inspect_canvas(base, session, canvas):
+def inspect_canvas(base, session):
     screenshot = request(
         base,
         "GET",
-        "/session/{0}/element/{1}/screenshot".format(session, canvas),
+        "/session/{0}/screenshot".format(session),
     )["value"]
     return inspect_png(base64.b64decode(screenshot))
 
@@ -372,8 +372,8 @@ def main():
         for index, (session, player) in enumerate(sessions):
             canvas = evidence[index]["canvasElement"]
             evidence[index]["actionRender"] = wait_for(
-                lambda session=session, canvas=canvas: inspect_canvas(
-                    args.webdriver_url, session, canvas
+                lambda session=session: inspect_canvas(
+                    args.webdriver_url, session
                 ),
                 45,
                 player + " rendered arena before W3C turn",
@@ -408,9 +408,7 @@ def main():
             screenshot = request(
                 args.webdriver_url,
                 "GET",
-                "/session/{0}/element/{1}/screenshot".format(
-                    session, evidence[index]["canvasElement"]
-                ),
+                "/session/{0}/screenshot".format(session),
             )["value"]
             png = base64.b64decode(screenshot)
             (evidence_dir / (player + ".png")).write_bytes(png)
