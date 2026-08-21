@@ -44,6 +44,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "tConfiguration.h"
 #include "tRecorder.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 #ifndef DEDICATED
 #include "SDL_thread.h"
 #include "SDL_mutex.h"
@@ -681,6 +685,13 @@ void rSysDep::SwapGL(){
     }
 
     sr_UnlockSDL();
+
+#ifdef __EMSCRIPTEN__
+    // WebGL presents implicitly when control returns to the browser. Yield
+    // before callers clear the framebuffer for the next frame.
+    emscripten_sleep( 0 );
+#endif
+
     // lock mutex again
     SDL_mutexP(  sr_netLock );
 
@@ -766,5 +777,4 @@ void  rSysDep::ClearGL(){
     }
 }
 #endif
-
 
