@@ -112,10 +112,6 @@ def send_turn_action(base, session, canvas, key):
     request(base, "DELETE", "/session/{0}/actions".format(session))
 
 
-def inspect_canvas(base, session):
-    return capture_canvas(base, session)["render"]
-
-
 def capture_canvas(base, session):
     screenshot = request(
         base,
@@ -433,13 +429,13 @@ def main():
         )
 
         for index, (session, player) in enumerate(sessions):
-            evidence[index]["actionRender"] = wait_for(
-                lambda session=session: inspect_canvas(
-                    args.webdriver_url, session
-                ),
+            capture = wait_for(
+                lambda session=session: capture_canvas(args.webdriver_url, session),
                 45,
                 player + " rendered arena after W3C turn",
             )
+            (evidence_dir / (player + ".png")).write_bytes(capture["png"])
+            evidence[index]["actionRender"] = capture["render"]
 
         for session, player in sessions:
             wait_for_state(
@@ -501,15 +497,7 @@ def main():
                 value["transport"].get("sentDatagrams", 0) > 0 and
                 value["transport"].get("receivedDatagrams", 0) > 0,
             )
-            capture = wait_for(
-                lambda session=session: capture_canvas(args.webdriver_url, session),
-                15,
-                player + " rendered arena after authoritative winner",
-            )
-            png = capture["png"]
-            (evidence_dir / (player + ".png")).write_bytes(png)
             evidence[index]["finalState"] = final_state
-            evidence[index]["render"] = capture["render"]
             del evidence[index]["canvasElement"]
         (evidence_dir / (args.browser + "-states.json")).write_text(
             json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
