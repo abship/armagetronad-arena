@@ -83,4 +83,18 @@ for browser in "$@"; do
         exit 1
     fi
     docker rm -f "$container" >/dev/null 2>&1 || true
+
+    released=false
+    for attempt in $(seq 1 60); do
+        if grep -q "^PLAYER_LEFT ${browser}1 " "$repo_dir/build/runtime/server/ladderlog.txt" &&
+            grep -q "^PLAYER_LEFT ${browser}2 " "$repo_dir/build/runtime/server/ladderlog.txt"; then
+            released=true
+            break
+        fi
+        sleep 1
+    done
+    test "$released" = true || {
+        echo "$browser clients did not leave the native server" >&2
+        exit 1
+    }
 done
