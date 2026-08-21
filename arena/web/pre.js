@@ -39,7 +39,9 @@ var arenaInputStatus = Module['arenaInputStatus'] = {
   lastAction: '',
   lastActionPlayer: 0,
   lastActionValue: 0,
-  lastActionAccepted: false
+  lastActionAccepted: false,
+  ownershipCandidates: 0,
+  ownershipFallbacks: 0
 };
 function arenaRecordKey(event) {
   if (event.type === 'keydown') arenaInputStatus.keyDown += 1;

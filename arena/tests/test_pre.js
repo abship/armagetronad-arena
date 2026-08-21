@@ -66,4 +66,6 @@ assert.strictEqual(0, context.Module.arenaInputStatus.sdlKeyUp);
 assert.strictEqual(false, context.Module.arenaInputStatus.lastSDLBound);
 assert.strictEqual(0, context.Module.arenaInputStatus.playerActions);
 assert.strictEqual(false, context.Module.arenaInputStatus.lastActionAccepted);
+assert.strictEqual(0, context.Module.arenaInputStatus.ownershipCandidates);
+assert.strictEqual(0, context.Module.arenaInputStatus.ownershipFallbacks);
 console.log('browser ticket bootstrap tests: pass');
