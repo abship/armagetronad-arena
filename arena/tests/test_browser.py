@@ -113,10 +113,23 @@ def send_turn_action(base, session, canvas, key):
 
 
 def capture_canvas(base, session):
-    data_url = execute(
+    execute(
         base,
         session,
-        "return document.getElementById('canvas').toDataURL('image/png');",
+        """
+Module['arenaCapturedFrame'] = null;
+Module['arenaCaptureRequested'] = true;
+return true;
+""",
+    )
+    data_url = wait_for(
+        lambda: execute(
+            base,
+            session,
+            "return Module['arenaCapturedFrame'] || null;",
+        ),
+        5,
+        "upstream frame capture before clear",
     )
     prefix = "data:image/png;base64,"
     if not isinstance(data_url, str) or not data_url.startswith(prefix):

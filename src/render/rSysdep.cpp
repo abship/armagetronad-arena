@@ -662,6 +662,26 @@ void rSysDep::SwapGL(){
         break;
     }
 
+#ifdef __EMSCRIPTEN__
+    // Capture test evidence while the completed frame is still in the WebGL
+    // drawing buffer. The caller clears it immediately after SwapGL returns.
+    EM_ASM({
+        if ( Module['arenaCaptureRequested'] )
+        {
+            Module['arenaCaptureRequested'] = false;
+            try
+            {
+                Module['arenaCapturedFrame'] =
+                    Module['canvas'].toDataURL('image/png');
+            }
+            catch ( error )
+            {
+                Module['arenaCapturedFrame'] = 'error:' + String(error);
+            }
+        }
+    });
+#endif
+
 #if defined(SDL_OPENGL)
     if (lastSuccess.useSDL)
         SDL_GL_SwapBuffers();
@@ -777,4 +797,3 @@ void  rSysDep::ClearGL(){
     }
 }
 #endif
-
