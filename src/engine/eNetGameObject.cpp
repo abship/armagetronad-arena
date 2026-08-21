@@ -83,11 +83,7 @@ void eNetGameObject::InitAfterCreation(){
 eNetGameObject::eNetGameObject(eGrid *grid, const eCoord &pos,const eCoord &dir,
                                ePlayerNetID* p,bool autodelete)
         :eGameObject(grid, pos,dir,NULL,autodelete),
-         nNetObject(Owner(p)),player(p)
-#ifdef __EMSCRIPTEN__
-         ,arenaPlayerID_(0)
-#endif
-{
+         nNetObject(Owner(p)),player(p){
     lastClientsideAction=0;
     if (sn_GetNetState()!=nCLIENT)
         RequestSync();
@@ -98,41 +94,18 @@ eNetGameObject::eNetGameObject(eGrid *grid, const eCoord &pos,const eCoord &dir,
 
 eNetGameObject::eNetGameObject(nMessage &m)
         :eGameObject(eGrid::CurrentGrid(), eCoord(0,0), eCoord(0,0), NULL),
-nNetObject(m)
-#ifdef __EMSCRIPTEN__
-        ,arenaPlayerID_(0)
-#endif
-{
+nNetObject(m){
     tASSERT(grid);
 
     lastClientsideAction=0;
     unsigned short pid;
     m.Read(pid);
-#ifdef __EMSCRIPTEN__
-    arenaPlayerID_ = pid;
-#endif
     player=static_cast<ePlayerNetID *>(Object(pid));
     m.Read(pid);
     autodelete=pid;
 
     laggometerSmooth=laggometer=0;
 }
-
-#ifdef __EMSCRIPTEN__
-void eNetGameObject::ArenaResolvePlayer()
-{
-    if ( !player && arenaPlayerID_ )
-    {
-        ePlayerNetID * resolved = static_cast< ePlayerNetID * >( Object( arenaPlayerID_ ) );
-        if ( resolved )
-        {
-            player = resolved;
-            resolved->ControlObject( this );
-            arenaPlayerID_ = 0;
-        }
-    }
-}
-#endif
 
 void eNetGameObject::DoRemoveFromGame(){
     // let the object get deleted on exit if nobody else is interested
@@ -301,12 +274,6 @@ bool eNetGameObject::ClearToTransmit(int user) const{
 }
 
 bool eNetGameObject::Timestep(REAL currentTime){
-#ifdef __EMSCRIPTEN__
-    // Browser datagrams are queued as complete messages. A cycle create can be
-    // constructed before its referenced player object is registered; retry the
-    // original authoritative object-ID association without changing gameplay.
-    ArenaResolvePlayer();
-#endif
     // calculate new sr_laggometer
     if (sn_GetNetState() == nSTANDALONE){
         laggometerSmooth=0;
@@ -389,4 +356,3 @@ nMachine & eNetGameObject::DoGetMachine( void ) const
     else
         return nNetObject::DoGetMachine();
 }
-

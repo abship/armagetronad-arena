@@ -55,6 +55,7 @@ EM_JS( void, su_ArenaRecordPlayerAction,
     status['lastActionPlayer'] = player;
     status['lastActionValue'] = value;
     status['lastActionAccepted'] = !!accepted;
+    if (accepted) status['acceptedActions'] += 1;
 } );
 #endif
 

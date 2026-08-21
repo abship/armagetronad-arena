@@ -85,8 +85,14 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
-EM_JS( void, sg_ArenaSetClientStage, ( const char * stage ), {
+EM_JS( void, sg_ArenaSetClientStage,
+       ( const char * stage, int player, int object, int alive ), {
     Module['arenaClientStage'] = UTF8ToString(stage);
+    var status = Module['arenaInputStatus'];
+    if (!status) return;
+    status['localPlayerPresent'] = !!player;
+    status['localObjectPresent'] = !!object;
+    status['localObjectAlive'] = !!alive;
 } );
 #endif
 
@@ -4257,13 +4263,13 @@ bool gGame::GameLoop(bool input){
     // Let the browser harness deliver controls only after the authoritative
     // upstream game timer leaves the countdown. This is observability only;
     // game state, timing, and simulation remain owned by the C++ client.
-    static bool arenaGameLive = false;
     bool const live = state == GS_PLAY && gtime >= 0;
-    if ( live != arenaGameLive )
-    {
-        sg_ArenaSetClientStage( live ? "game-live" : "game-transition" );
-        arenaGameLive = live;
-    }
+    ePlayer * arenaLocal = ePlayer::PlayerConfig( 0 );
+    ePlayerNetID * arenaNetPlayer = arenaLocal ? arenaLocal->netPlayer : NULL;
+    eNetGameObject * arenaObject = arenaNetPlayer ? arenaNetPlayer->Object() : NULL;
+    sg_ArenaSetClientStage( live ? "game-live" : "game-transition",
+                            arenaNetPlayer != NULL, arenaObject != NULL,
+                            arenaObject && arenaObject->Alive() );
 #endif
     //con << sg_netPlayerWalls.Len() << '\n';
 

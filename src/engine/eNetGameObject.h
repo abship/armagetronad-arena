@@ -48,10 +48,6 @@ protected:
 
     tCHECKED_PTR(ePlayerNetID)    player; // the player controlling this cycle.
     // NULL means the AI.
-#ifdef __EMSCRIPTEN__
-    unsigned short arenaPlayerID_; // authoritative create-message reference
-    void ArenaResolvePlayer();
-#endif
     REAL laggometer;        //!< the actual best estimate for lag
     REAL laggometerSmooth;  //!< the lag, smoothed over time
 

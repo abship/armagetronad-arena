@@ -376,31 +376,35 @@ def main():
             return text if ready else None
 
         wait_for(players_ready, 45, "both authoritative team entries")
-        time.sleep(4)
-        for index, (session, player) in enumerate(sessions):
-            evidence[index]["actionRender"] = wait_for(
-                lambda session=session: inspect_canvas(
-                    args.webdriver_url, session
-                ),
-                45,
-                player + " rendered arena before W3C turn",
-            )
-        for session, player in sessions:
-            wait_for_state(
-                args.webdriver_url,
-                session,
-                60,
-                player + " live upstream game timer",
-                lambda value: value.get("stage") == "game-live" and
+
+        def both_players_live():
+            states = [browser_state(args.webdriver_url, session) for session, _ in sessions]
+            return states if all(
+                value.get("stage") == "game-live" and
+                value.get("input") and
+                value["input"].get("localPlayerPresent") and
+                value["input"].get("localObjectPresent") and
+                value["input"].get("localObjectAlive") and
                 value.get("transport") and
                 value["transport"].get("open", 0) >= 1 and
-                value["transport"].get("failed", 0) == 0,
-            )
+                value["transport"].get("failed", 0) == 0
+                for value in states
+            ) else None
 
-        # Both clients exercise real controls during live upstream play. Player
-        # 2's short S-turn returns to its original line first; player 1's longer
-        # S-turn extends its path so the authoritative server resolves the duel
-        # instead of repeating the symmetric straight-line tie.
+        live_states = wait_for(
+            both_players_live, 60, "both live controlled upstream cycles"
+        )
+        for index, state in enumerate(live_states):
+            evidence[index]["preActionState"] = state
+
+        baseline_lines = server_result().splitlines()
+        baseline_deaths = [
+            sum("DEATH_SUICIDE" in line and player in line for line in baseline_lines)
+            for player in players
+        ]
+
+        # Act immediately while both upstream-controlled cycle objects are
+        # alive. A nonnegative game timer also covers the dead/inter-round phase.
         send_turn_action(
             args.webdriver_url,
             sessions[1][0],
@@ -428,6 +432,15 @@ def main():
             "d",
         )
 
+        for index, (session, player) in enumerate(sessions):
+            evidence[index]["actionRender"] = wait_for(
+                lambda session=session: inspect_canvas(
+                    args.webdriver_url, session
+                ),
+                45,
+                player + " rendered arena after W3C turn",
+            )
+
         for session, player in sessions:
             wait_for_state(
                 args.webdriver_url,
@@ -436,7 +449,8 @@ def main():
                 player + " received W3C controls in the browser",
                 lambda value: value.get("input") and
                 value["input"].get("keyDown", 0) >= 2 and
-                value["input"].get("keyUp", 0) >= 2,
+                value["input"].get("keyUp", 0) >= 2 and
+                value["input"].get("acceptedActions", 0) >= 1,
             )
 
         def second_player_dies_first():
@@ -450,7 +464,11 @@ def main():
             second_deaths = sum(
                 "DEATH_SUICIDE" in line and players[1] in line for line in lines
             )
-            return text if second_deaths > first_deaths else None
+            return text if (
+                second_deaths > baseline_deaths[1] and
+                second_deaths - baseline_deaths[1] >
+                first_deaths - baseline_deaths[0]
+            ) else None
 
         wait_for(second_player_dies_first, 60, players[1] + " authoritative first death")
 

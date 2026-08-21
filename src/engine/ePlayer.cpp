@@ -58,17 +58,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <time.h>
 #include <climits>
 
-#ifdef __EMSCRIPTEN__
-#include <emscripten/emscripten.h>
-
-EM_JS( void, se_ArenaRecordOwnershipFallback, ( int candidates, int used ), {
-    var status = Module['arenaInputStatus'];
-    if (!status) return;
-    status['ownershipCandidates'] = candidates;
-    if (used) status['ownershipFallbacks'] += 1;
-} );
-#endif
-
 int se_lastSaidMaxEntries = 8;
 
 // call on commands that only work on the server; quit if it returns true
@@ -4070,31 +4059,6 @@ bool ePlayer::Act(uAction *act,REAL x){
         for(i=se_PlayerNetIDs.Len()-1;i>=0;i--)
             if (se_PlayerNetIDs[i]->pID==id && se_PlayerNetIDs[i]->object)
                 object=se_PlayerNetIDs[i]->object;
-
-#ifdef __EMSCRIPTEN__
-        // The Arena browser profile has one local player per authenticated
-        // connection. If the server-echoed roster entry lost its local pID,
-        // reconcile only to the unique object the native protocol says this
-        // connection owns. The object's upstream action path remains unchanged.
-        int arenaOwnedObjects = 0;
-        eGameObject * arenaOwnedObject = NULL;
-        if ( !object )
-        {
-            for ( int i = se_PlayerNetIDs.Len()-1; i >= 0; --i )
-            {
-                ePlayerNetID * candidate = se_PlayerNetIDs[i];
-                if ( candidate->Owner() == ::sn_myNetID && candidate->object )
-                {
-                    ++arenaOwnedObjects;
-                    arenaOwnedObject = candidate->object;
-                }
-            }
-            if ( arenaOwnedObjects == 1 )
-                object = arenaOwnedObject;
-        }
-        se_ArenaRecordOwnershipFallback( arenaOwnedObjects,
-                                         object && object == arenaOwnedObject );
-#endif
 
         bool objectAct = false; // set to true if an action of the object was triggered
         bool ret = ((cam    && cam->Act(reinterpret_cast<uActionCamera *>(act),x)) ||
