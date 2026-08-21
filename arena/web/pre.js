@@ -1,5 +1,15 @@
 /* Copyright (C) 2026 Arena contributors. GPLv2+; see COPYING.txt. */
 Module['canvas'] = document.getElementById('canvas');
+Module['preinitializedWebGLContext'] = Module['canvas'].getContext('webgl', {
+  alpha: false,
+  antialias: false,
+  depth: true,
+  preserveDrawingBuffer: true,
+  stencil: false
+});
+if (!Module['preinitializedWebGLContext']) {
+  throw new Error('Arena requires a WebGL 1 context');
+}
 Module['thisProgram'] = '/arena-web/bin/armagetronad_main';
 var arenaPreviousPrintErr = Module['printErr'];
 Module['printErr'] = function(value) {
