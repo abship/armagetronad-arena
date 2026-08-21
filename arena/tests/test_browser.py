@@ -254,6 +254,7 @@ return (function() {
     canvasHeight: canvas ? canvas.height : 0,
     documentReadyState: document.readyState,
     errors: (window.__arenaErrors || []).slice(-16),
+    input: (typeof Module !== 'undefined') ? (Module['arenaInputStatus'] || null) : null,
     modulePresent: typeof Module !== 'undefined',
     stage: (typeof Module !== 'undefined') ? (Module['arenaClientStage'] || 'runtime-startup') : null,
     statusError: statusError,
@@ -345,10 +346,10 @@ def main():
                 not value.get("ticketVisible"),
             )
             canvas = find_element(args.webdriver_url, session, "#canvas")
-            key_name = "ArrowLeft" if number == 0 else "ArrowRight"
+            key_name = "KeyA" if number == 0 else "KeyD"
             evidence.append({
                 "player": player,
-                "action": key_name + "," + ("ArrowRight" if number == 0 else "ArrowLeft"),
+                "action": key_name + "," + ("KeyD" if number == 0 else "KeyA"),
                 "actionCount": 2,
                 "canvasElement": canvas,
                 "initialState": state,
@@ -404,28 +405,39 @@ def main():
             args.webdriver_url,
             sessions[1][0],
             evidence[1]["canvasElement"],
-            "\ue014",
+            "d",
         )
         time.sleep(0.35)
         send_turn_action(
             args.webdriver_url,
             sessions[1][0],
             evidence[1]["canvasElement"],
-            "\ue012",
+            "a",
         )
         send_turn_action(
             args.webdriver_url,
             sessions[0][0],
             evidence[0]["canvasElement"],
-            "\ue012",
+            "a",
         )
         time.sleep(1.5)
         send_turn_action(
             args.webdriver_url,
             sessions[0][0],
             evidence[0]["canvasElement"],
-            "\ue014",
+            "d",
         )
+
+        for session, player in sessions:
+            wait_for_state(
+                args.webdriver_url,
+                session,
+                15,
+                player + " received W3C controls in the browser",
+                lambda value: value.get("input") and
+                value["input"].get("keyDown", 0) >= 2 and
+                value["input"].get("keyUp", 0) >= 2,
+            )
 
         def second_player_dies_first():
             text = server_result()

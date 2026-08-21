@@ -25,6 +25,23 @@ var arenaPlayer = (arenaSearch.get('player') || 'ArenaPlayer')
   .replace(/[^A-Za-z0-9_-]/g, '')
   .slice(0, 16) || 'ArenaPlayer';
 
+var arenaInputStatus = Module['arenaInputStatus'] = {
+  keyDown: 0,
+  keyUp: 0,
+  lastKey: '',
+  lastCode: '',
+  lastKeyCode: 0
+};
+function arenaRecordKey(event) {
+  if (event.type === 'keydown') arenaInputStatus.keyDown += 1;
+  else arenaInputStatus.keyUp += 1;
+  arenaInputStatus.lastKey = String(event.key || '').slice(0, 32);
+  arenaInputStatus.lastCode = String(event.code || '').slice(0, 32);
+  arenaInputStatus.lastKeyCode = Number(event.keyCode || 0);
+}
+document.addEventListener('keydown', arenaRecordKey, true);
+document.addEventListener('keyup', arenaRecordKey, true);
+
 Module['preRun'] = Module['preRun'] || [];
 Module['preRun'].push(function() {
   FS.mkdirTree('/user/var');
@@ -33,6 +50,9 @@ Module['preRun'].push(function() {
     // Emscripten 6.0.7 SDL1 maps arrows to scancode | (1 << 10).
     '\nKEYBOARD 1104 PLAYER_BIND CYCLE_TURN_LEFT 1' +
     '\nKEYBOARD 1103 PLAYER_BIND CYCLE_TURN_RIGHT 1' +
+    // Character keys map directly across W3C Actions and Emscripten SDL1.
+    '\nKEYBOARD 97 PLAYER_BIND CYCLE_TURN_LEFT 1' +
+    '\nKEYBOARD 100 PLAYER_BIND CYCLE_TURN_RIGHT 1' +
     '\nBIG_BROTHER 0\nSOUND_QUALITY 0\n');
 });
 Module['arguments'] = [

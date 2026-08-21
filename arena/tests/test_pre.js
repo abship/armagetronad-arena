@@ -7,10 +7,14 @@ var assert = require('assert');
 var replaced = null;
 var writes = [];
 var errors = [];
+var listeners = {};
 var context = {
   Module: {},
   URLSearchParams: URLSearchParams,
-  document: { getElementById: function() { return {}; } },
+  document: {
+    getElementById: function() { return {}; },
+    addEventListener: function(name, callback) { listeners[name] = callback; }
+  },
   window: {
     __arenaRecordError: function(value) { errors.push(String(value)); },
     console: { error: function() {} },
@@ -42,10 +46,19 @@ assert.strictEqual('/user/var/user.cfg', writes[0][0]);
 assert.ok(writes[0][1].includes('PLAYER_1 Arena_1'));
 assert.ok(writes[0][1].includes('KEYBOARD 1104 PLAYER_BIND CYCLE_TURN_LEFT 1'));
 assert.ok(writes[0][1].includes('KEYBOARD 1103 PLAYER_BIND CYCLE_TURN_RIGHT 1'));
+assert.ok(writes[0][1].includes('KEYBOARD 97 PLAYER_BIND CYCLE_TURN_LEFT 1'));
+assert.ok(writes[0][1].includes('KEYBOARD 100 PLAYER_BIND CYCLE_TURN_RIGHT 1'));
 assert.ok(!writes[0][1].includes('KEYBOARD 276 PLAYER_BIND'));
 assert.ok(!writes[0][1].includes('KEYBOARD 275 PLAYER_BIND'));
 assert.ok(writes[0][1].includes('SOUND_QUALITY 0'));
 assert.ok(!writes[0][1].includes('short-lived-ticket'));
 context.Module.printErr('diagnostic assertion');
 assert.deepStrictEqual(['diagnostic assertion'], errors);
+listeners.keydown({ type: 'keydown', key: 'a', code: 'KeyA', keyCode: 65 });
+listeners.keyup({ type: 'keyup', key: 'a', code: 'KeyA', keyCode: 65 });
+assert.strictEqual(1, context.Module.arenaInputStatus.keyDown);
+assert.strictEqual(1, context.Module.arenaInputStatus.keyUp);
+assert.strictEqual('a', context.Module.arenaInputStatus.lastKey);
+assert.strictEqual('KeyA', context.Module.arenaInputStatus.lastCode);
+assert.strictEqual(65, context.Module.arenaInputStatus.lastKeyCode);
 console.log('browser ticket bootstrap tests: pass');
