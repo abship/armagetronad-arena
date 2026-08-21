@@ -30,8 +30,9 @@ Module['preRun'].push(function() {
   FS.mkdirTree('/user/var');
   FS.writeFile('/user/var/user.cfg',
     'FIRST_USE 0\nPLAYER_1 ' + arenaPlayer +
-    '\nKEYBOARD 276 PLAYER_BIND CYCLE_TURN_LEFT 1' +
-    '\nKEYBOARD 275 PLAYER_BIND CYCLE_TURN_RIGHT 1' +
+    // Emscripten 6.0.7 SDL1 maps arrows to scancode | (1 << 10).
+    '\nKEYBOARD 1104 PLAYER_BIND CYCLE_TURN_LEFT 1' +
+    '\nKEYBOARD 1103 PLAYER_BIND CYCLE_TURN_RIGHT 1' +
     '\nBIG_BROTHER 0\nSOUND_QUALITY 0\n');
 });
 Module['arguments'] = [
