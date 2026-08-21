@@ -232,6 +232,8 @@ def inspect_png(png):
     entropy = -sum(
         (count / total) * math.log(count / total, 2) for count in colors.values()
     ) if total else 0.0
+    dominant_count = max(colors.values()) if colors else 0
+    non_dominant = total - dominant_count
     luminance_range = max(luminance) - min(luminance) if luminance else 0
     result = {
         "width": width,
@@ -240,8 +242,9 @@ def inspect_png(png):
         "distinctColors": len(colors),
         "colorEntropyBits": round(entropy, 4),
         "luminanceRange": luminance_range,
+        "nonDominantSamples": non_dominant,
     }
-    if len(colors) < 8 or entropy < 0.1 or luminance_range < 20:
+    if len(colors) < 3 or non_dominant < 64 or entropy < 0.1 or luminance_range < 20:
         raise RuntimeError("canvas screenshot is blank or near-uniform: {0}".format(result))
     return result
 
