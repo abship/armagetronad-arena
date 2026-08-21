@@ -113,12 +113,17 @@ def send_turn_action(base, session, canvas, key):
 
 
 def inspect_canvas(base, session):
+    return capture_canvas(base, session)["render"]
+
+
+def capture_canvas(base, session):
     screenshot = request(
         base,
         "GET",
         "/session/{0}/screenshot".format(session),
     )["value"]
-    return inspect_png(base64.b64decode(screenshot))
+    png = base64.b64decode(screenshot)
+    return {"png": png, "render": inspect_png(png)}
 
 
 def paeth(left, above, upper_left):
@@ -370,6 +375,7 @@ def main():
             return text if ready else None
 
         wait_for(players_ready, 45, "both authoritative team entries")
+        time.sleep(4)
         for index, (session, player) in enumerate(sessions):
             evidence[index]["actionRender"] = wait_for(
                 lambda session=session: inspect_canvas(
@@ -378,8 +384,6 @@ def main():
                 45,
                 player + " rendered arena before W3C turn",
             )
-
-        time.sleep(4)
         for index, (session, _player) in enumerate(sessions):
             canvas = evidence[index]["canvasElement"]
             key_value = "\ue012" if index == 0 else "\ue014"
@@ -422,15 +426,15 @@ def main():
                 value["transport"].get("sentDatagrams", 0) > 0 and
                 value["transport"].get("receivedDatagrams", 0) > 0,
             )
-            screenshot = request(
-                args.webdriver_url,
-                "GET",
-                "/session/{0}/screenshot".format(session),
-            )["value"]
-            png = base64.b64decode(screenshot)
+            capture = wait_for(
+                lambda session=session: capture_canvas(args.webdriver_url, session),
+                15,
+                player + " rendered arena after authoritative winner",
+            )
+            png = capture["png"]
             (evidence_dir / (player + ".png")).write_bytes(png)
             evidence[index]["finalState"] = final_state
-            evidence[index]["render"] = inspect_png(png)
+            evidence[index]["render"] = capture["render"]
             del evidence[index]["canvasElement"]
         (evidence_dir / (args.browser + "-states.json")).write_text(
             json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"

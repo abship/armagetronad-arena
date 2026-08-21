@@ -40,6 +40,8 @@ assert.ok(replaced.includes('relay='));
 context.Module.preRun[0]();
 assert.strictEqual('/user/var/user.cfg', writes[0][0]);
 assert.ok(writes[0][1].includes('PLAYER_1 Arena_1'));
+assert.ok(writes[0][1].includes('KEYBOARD 276 PLAYER_BIND CYCLE_TURN_LEFT 1'));
+assert.ok(writes[0][1].includes('KEYBOARD 275 PLAYER_BIND CYCLE_TURN_RIGHT 1'));
 assert.ok(writes[0][1].includes('SOUND_QUALITY 0'));
 assert.ok(!writes[0][1].includes('short-lived-ticket'));
 context.Module.printErr('diagnostic assertion');

@@ -29,7 +29,10 @@ Module['preRun'] = Module['preRun'] || [];
 Module['preRun'].push(function() {
   FS.mkdirTree('/user/var');
   FS.writeFile('/user/var/user.cfg',
-    'FIRST_USE 0\nPLAYER_1 ' + arenaPlayer + '\nBIG_BROTHER 0\nSOUND_QUALITY 0\n');
+    'FIRST_USE 0\nPLAYER_1 ' + arenaPlayer +
+    '\nKEYBOARD 276 PLAYER_BIND CYCLE_TURN_LEFT 1' +
+    '\nKEYBOARD 275 PLAYER_BIND CYCLE_TURN_RIGHT 1' +
+    '\nBIG_BROTHER 0\nSOUND_QUALITY 0\n');
 });
 Module['arguments'] = [
   '--datadir', '/data',
