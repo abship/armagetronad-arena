@@ -387,7 +387,6 @@ def main():
                 value["input"].get("localPlayerPresent") and
                 value["input"].get("localObjectPresent") and
                 value["input"].get("localObjectAlive") and
-                value.get("preserveDrawingBuffer") is True and
                 value.get("transport") and
                 value["transport"].get("open", 0) >= 1 and
                 value["transport"].get("failed", 0) == 0
