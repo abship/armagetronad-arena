@@ -393,6 +393,15 @@ def main():
         for index, state in enumerate(live_states):
             evidence[index]["preActionState"] = state
 
+        # Capture while the state above guarantees both upstream cycle objects
+        # are alive. Waiting on one client's later frame before inspecting the
+        # other can leave the second camera in a valid but sparse inter-round
+        # view, even though its gameplay and renderer are healthy.
+        for index, (session, player) in enumerate(sessions):
+            capture = capture_canvas(args.webdriver_url, session)
+            (evidence_dir / (player + ".png")).write_bytes(capture["png"])
+            evidence[index]["liveRender"] = capture["render"]
+
         # Act immediately while both upstream-controlled cycle objects are
         # alive. A nonnegative game timer also covers the dead/inter-round phase.
         send_turn_action(
@@ -421,15 +430,6 @@ def main():
             evidence[0]["canvasElement"],
             "d",
         )
-
-        for index, (session, player) in enumerate(sessions):
-            capture = wait_for(
-                lambda session=session: capture_canvas(args.webdriver_url, session),
-                45,
-                player + " rendered arena after W3C turn",
-            )
-            (evidence_dir / (player + ".png")).write_bytes(capture["png"])
-            evidence[index]["actionRender"] = capture["render"]
 
         for session, player in sessions:
             wait_for_state(
@@ -490,7 +490,7 @@ def main():
                 if index < len(evidence):
                     diagnostic["action"] = evidence[index].get("action")
                     diagnostic["actionCount"] = evidence[index].get("actionCount")
-                    diagnostic["actionRender"] = evidence[index].get("actionRender")
+                    diagnostic["liveRender"] = evidence[index].get("liveRender")
                 diagnostics.append(diagnostic)
                 screenshot = request(
                     args.webdriver_url, "GET", "/session/{0}/screenshot".format(session)
