@@ -166,7 +166,11 @@ public:
     };
 
     virtual void BeginQuadStrip(){
+#ifdef __EMSCRIPTEN__
+        BeginPrimitive(GL_TRIANGLE_STRIP, true);
+#else
         BeginPrimitive(GL_QUAD_STRIP, true);
+#endif
     };
 
     virtual void BeginTriangleFan(){
