@@ -113,12 +113,15 @@ def send_turn_action(base, session, canvas, key):
 
 
 def capture_canvas(base, session):
-    screenshot = request(
+    data_url = execute(
         base,
-        "GET",
-        "/session/{0}/screenshot".format(session),
-    )["value"]
-    png = base64.b64decode(screenshot)
+        session,
+        "return document.getElementById('canvas').toDataURL('image/png');",
+    )
+    prefix = "data:image/png;base64,"
+    if not isinstance(data_url, str) or not data_url.startswith(prefix):
+        raise RuntimeError("canvas did not return a PNG data URL")
+    png = base64.b64decode(data_url[len(prefix):], validate=True)
     return {"png": png, "render": inspect_png(png)}
 
 
@@ -237,6 +240,8 @@ def browser_state(base, session):
         """
 return (function() {
   var canvas = document.getElementById('canvas');
+  var gl = canvas && canvas.getContext('webgl');
+  var glAttributes = gl && gl.getContextAttributes();
   var transport = (typeof Module !== 'undefined') && Module['arenaSocketTransport'];
   var transportStatus = null;
   var statusError = null;
@@ -252,6 +257,7 @@ return (function() {
     errors: (window.__arenaErrors || []).slice(-16),
     input: (typeof Module !== 'undefined') ? (Module['arenaInputStatus'] || null) : null,
     modulePresent: typeof Module !== 'undefined',
+    preserveDrawingBuffer: !!(glAttributes && glAttributes.preserveDrawingBuffer),
     stage: (typeof Module !== 'undefined') ? (Module['arenaClientStage'] || 'runtime-startup') : null,
     statusError: statusError,
     ticketVisible: window.location.href.indexOf('ticket=') !== -1,
@@ -381,6 +387,7 @@ def main():
                 value["input"].get("localPlayerPresent") and
                 value["input"].get("localObjectPresent") and
                 value["input"].get("localObjectAlive") and
+                value.get("preserveDrawingBuffer") is True and
                 value.get("transport") and
                 value["transport"].get("open", 0) >= 1 and
                 value["transport"].get("failed", 0) == 0

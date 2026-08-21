@@ -8,20 +8,11 @@ var replaced = null;
 var writes = [];
 var errors = [];
 var listeners = {};
-var webgl = {};
-var webglOptions = null;
-var canvas = {
-  getContext: function(name, options) {
-    assert.strictEqual('webgl', name);
-    webglOptions = options;
-    return webgl;
-  }
-};
 var context = {
   Module: {},
   URLSearchParams: URLSearchParams,
   document: {
-    getElementById: function() { return canvas; },
+    getElementById: function() { return {}; },
     addEventListener: function(name, callback) { listeners[name] = callback; }
   },
   window: {
@@ -48,14 +39,6 @@ vm.runInNewContext(
 assert.strictEqual('wss://relay.invalid/socket', context.Module.arenaRelayURL);
 assert.strictEqual('short-lived-ticket', context.Module.arenaRelayTicket);
 assert.strictEqual('/arena-web/bin/armagetronad_main', context.Module.thisProgram);
-assert.strictEqual(webgl, context.Module.preinitializedWebGLContext);
-assert.strictEqual(JSON.stringify({
-  alpha: false,
-  antialias: false,
-  depth: true,
-  preserveDrawingBuffer: true,
-  stencil: false
-}), JSON.stringify(webglOptions));
 assert.ok(!replaced.includes('ticket='));
 assert.ok(replaced.includes('relay='));
 context.Module.preRun[0]();
