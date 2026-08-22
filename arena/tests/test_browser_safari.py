@@ -55,6 +55,19 @@ class SafariHelpersTest(unittest.TestCase):
             ["http://client/"],
         )
 
+    def test_wait_for_state_retries_transient_null(self):
+        expected = {"transport": {"open": 1}}
+        with mock.patch.object(BROWSER, "browser_state", side_effect=[None, expected]) as state, \
+             mock.patch.object(BROWSER.time, "sleep"):
+            self.assertEqual(
+                expected,
+                BROWSER.wait_for_state(
+                    "http://driver", ("session", "player", None), 1,
+                    "browser state", lambda value: value.get("transport"),
+                ),
+            )
+        self.assertEqual(2, state.call_count)
+
     def test_turn_reselects_frame_and_refinds_canvas(self):
         client = ("session", "safari2", 1)
         with mock.patch.object(BROWSER, "select_client", return_value="session") as select, \

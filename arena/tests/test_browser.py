@@ -356,7 +356,7 @@ def wait_for_state(base, client, timeout, description, accept):
     while time.monotonic() < deadline:
         try:
             last = browser_state(base, client)
-            if accept(last):
+            if isinstance(last, dict) and accept(last):
                 return last
         except (RuntimeError, urllib.error.URLError) as error:
             last = {"webdriverError": redact(error)}
