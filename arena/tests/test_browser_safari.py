@@ -41,6 +41,12 @@ class SafariHelpersTest(unittest.TestCase):
             request.call_args,
         )
 
+    def test_waits_for_top_level_document(self):
+        with mock.patch.object(BROWSER, "execute", side_effect=[False, True]) as execute, \
+             mock.patch.object(BROWSER.time, "sleep"):
+            self.assertTrue(BROWSER.wait_for_document("http://driver", "session"))
+        self.assertEqual(2, execute.call_count)
+
     def test_turn_reselects_frame_and_refinds_canvas(self):
         client = ("session", "safari2", 1)
         with mock.patch.object(BROWSER, "select_client", return_value="session") as select, \

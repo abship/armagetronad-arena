@@ -322,6 +322,18 @@ def wait_for(predicate, timeout, description):
     raise RuntimeError("timed out waiting for {0}; last={1!r}".format(description, last))
 
 
+def wait_for_document(base, session, timeout=15):
+    return wait_for(
+        lambda: execute(
+            base,
+            session,
+            "return document.readyState === 'complete';",
+        ),
+        timeout,
+        "top-level document readiness",
+    )
+
+
 def wait_for_state(base, client, timeout, description, accept):
     deadline = time.monotonic() + timeout
     last = None
@@ -377,6 +389,7 @@ def main():
                 {"url": urllib.parse.urljoin(args.client_url, ".")},
                 timeout=10,
             )
+            wait_for_document(args.webdriver_url, session)
             frame_count = execute(
                 args.webdriver_url,
                 session,
