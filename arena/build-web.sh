@@ -29,6 +29,10 @@ esac
 
 test "$(git -C "$repo_dir" rev-parse 'v0.2.9.3.0^{}')" = "$ARENA_SOURCE_COMMIT"
 git -C "$repo_dir" merge-base --is-ancestor "$ARENA_SOURCE_COMMIT" HEAD
+test ! -L "$repo_dir/build" || {
+    echo "refusing symlinked build directory" >&2
+    exit 1
+}
 
 artifact_dir="$repo_dir/build/web"
 rm -rf "$artifact_dir"

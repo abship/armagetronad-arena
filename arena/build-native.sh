@@ -31,6 +31,10 @@ test -z "$(git -C "$repo_dir" diff --name-only "$ARENA_SOURCE_COMMIT" -- \
     src/engine/eGrid.cpp src/engine/eWall.cpp src/engine/eLagCompensation.cpp \
     src/tron/gArena.cpp src/tron/gCycle.cpp src/tron/gCycleMovement.cpp \
     src/tron/gSpawn.cpp src/tron/gWall.cpp)"
+test ! -L "$repo_dir/build" && test ! -L "$repo_dir/build/native" || {
+    echo "refusing symlinked build directory" >&2
+    exit 1
+}
 
 image=armagetronad-arena-native:arm-1-$architecture
 docker_build() {

@@ -25,6 +25,10 @@ git -C "$repo_dir" diff --quiet
 git -C "$repo_dir" diff --cached --quiet
 test "$(git -C "$repo_dir" rev-parse "$ARENA_SOURCE_TAG^{}")" = "$ARENA_SOURCE_COMMIT"
 git -C "$repo_dir" merge-base --is-ancestor "$ARENA_SOURCE_COMMIT" "$head"
+test ! -L "$repo_dir/build" && test ! -L "$repo_dir/build/reproducibility" || {
+    echo "refusing symlinked build directory" >&2
+    exit 1
+}
 
 result_dir="$repo_dir/build/reproducibility/$architecture"
 release_dir="$repo_dir/build/release"

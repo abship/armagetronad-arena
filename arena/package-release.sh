@@ -44,9 +44,17 @@ test -z "$ignored_inputs" || {
     printf '%s\n' "$ignored_inputs" >&2
     exit 1
 }
-
 native_dir="$repo_dir/build/native/$architecture"
 web_dir="$repo_dir/build/web"
+test ! -L "$repo_dir/build" \
+    && test ! -L "$repo_dir/build/native" \
+    && test ! -L "$native_dir" \
+    && test ! -L "$web_dir" \
+    && test ! -L "$output_dir" || {
+    echo "refusing symlinked release path" >&2
+    exit 1
+}
+
 test -x "$native_dir/armagetronad-dedicated"
 test -f "$native_dir/SHA256SUMS"
 test -f "$web_dir/SHA256SUMS"
