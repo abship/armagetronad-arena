@@ -93,7 +93,15 @@ def select_client(base, client):
     session, _player, frame = client
     if frame is not None:
         request(base, "POST", "/session/{0}/frame".format(session), {"id": None})
-        request(base, "POST", "/session/{0}/frame".format(session), {"id": frame})
+        frame_element = find_element(
+            base, session, "iframe:nth-of-type({0})".format(frame + 1)
+        )
+        request(
+            base,
+            "POST",
+            "/session/{0}/frame".format(session),
+            {"id": {"element-6066-11e4-a52e-4f735466cecf": frame_element}},
+        )
     return session
 
 

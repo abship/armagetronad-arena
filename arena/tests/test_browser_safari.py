@@ -15,12 +15,17 @@ SPEC.loader.exec_module(BROWSER)
 
 class SafariHelpersTest(unittest.TestCase):
     def test_selects_requested_iframe(self):
-        with mock.patch.object(BROWSER, "request") as request:
+        with mock.patch.object(BROWSER, "request") as request, \
+             mock.patch.object(BROWSER, "find_element", return_value="frame-element") as find:
             self.assertEqual("session", BROWSER.select_client("http://driver", ("session", "safari1", 1)))
+        find.assert_called_once_with("http://driver", "session", "iframe:nth-of-type(2)")
         self.assertEqual(
             [
                 mock.call("http://driver", "POST", "/session/session/frame", {"id": None}),
-                mock.call("http://driver", "POST", "/session/session/frame", {"id": 1}),
+                mock.call(
+                    "http://driver", "POST", "/session/session/frame",
+                    {"id": {"element-6066-11e4-a52e-4f735466cecf": "frame-element"}},
+                ),
             ],
             request.call_args_list,
         )
