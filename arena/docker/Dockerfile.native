@@ -1,6 +1,6 @@
 # Copyright (C) 2026 Arena contributors. GPLv2+; see COPYING.txt.
 ARG NATIVE_IMAGE=docker.io/library/debian@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
-FROM --platform=$TARGETPLATFORM ${NATIVE_IMAGE} AS build
+FROM --platform=$TARGETPLATFORM ${NATIVE_IMAGE} AS bootstrap
 
 ARG DEBIAN_SNAPSHOT
 ARG AUTOCONF_VERSION
@@ -36,7 +36,12 @@ ENV SOURCE_DATE_EPOCH=${ARENA_SOURCE_DATE_EPOCH} \
 WORKDIR /src
 COPY . .
 
-RUN ./bootstrap.sh
+RUN ./bootstrap.sh \
+    && for file in compile config.guess config.sub depcomp install-sh missing; do \
+        cp --remove-destination "$(readlink "$file")" "$file"; \
+    done
+
+FROM bootstrap AS build
 RUN mkdir /build /dest \
     && cd /build \
     && CFLAGS="-O2 -g0 -ffile-prefix-map=/src=. -ffile-prefix-map=/build=." \
@@ -60,6 +65,9 @@ RUN mkdir /build /dest \
         --disable-useradd \
     && make -j1 \
     && make DESTDIR=/dest install
+
+FROM scratch AS macos-source
+COPY --from=bootstrap /src/ /
 
 FROM scratch AS artifact
 COPY --from=build /dest/usr/local/bin/armagetronad-dedicated /armagetronad-dedicated

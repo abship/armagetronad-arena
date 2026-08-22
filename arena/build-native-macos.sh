@@ -8,6 +8,7 @@ set -eu
 arena_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_dir=$(dirname "$arena_dir")
 . "$arena_dir/pins.env"
+source_dir=${ARENA_MACOS_SOURCE_DIR:-$repo_dir}
 
 export SOURCE_DATE_EPOCH=$ARENA_SOURCE_DATE_EPOCH
 
@@ -32,7 +33,7 @@ export DEVELOPER_DIR=$developer_dir
 test "$(xcodebuild -version | sed -n '1p')" = "$expected_xcode" || fail 'unexpected Xcode version'
 test "$(xcodebuild -version | sed -n '2p')" = "$expected_xcode_build" || fail 'unexpected Xcode build'
 
-for tool in m4 aclocal autoheader autoconf automake make ar ranlib pkgconf; do
+for tool in make ar ranlib pkgconf; do
     command -v "$tool" >/dev/null 2>&1 || fail "missing required tool: $tool"
 done
 test "$(pkgconf --version)" = "$MACOS_INTEROP_PKGCONF_VERSION" || \
@@ -54,6 +55,10 @@ test "$sdk_xml_version" = "$MACOS_INTEROP_LIBXML2_VERSION" || \
 
 test "$(git -C "$repo_dir" rev-parse 'v0.2.9.3.0^{}')" = "$ARENA_SOURCE_COMMIT"
 git -C "$repo_dir" merge-base --is-ancestor "$ARENA_SOURCE_COMMIT" HEAD
+test -x "$source_dir/configure" || fail 'prepared configure script is missing'
+test -f "$source_dir/SOURCE-COMMIT" || fail 'prepared source commit is missing'
+test "$(cat "$source_dir/SOURCE-COMMIT")" = "$(git -C "$repo_dir" rev-parse HEAD)" || \
+    fail 'prepared source does not match the checked-out candidate'
 
 output_dir=$repo_dir/build/native-macos-interoperability
 build_dir=$output_dir/build
@@ -94,18 +99,13 @@ printf '%s\n' '#include <libxml/parser.h>' 'int main(void) { xmlCheckVersion(LIB
 "$temporary_dir/libxml2-probe"
 
 (
-    cd "$repo_dir"
-    ./bootstrap.sh
-)
-
-(
     cd "$build_dir"
-    CFLAGS="-O2 -g0 -ffile-prefix-map=$repo_dir=. -ffile-prefix-map=$build_dir=." \
-    CXXFLAGS="-O2 -g0 -ffile-prefix-map=$repo_dir=. -ffile-prefix-map=$build_dir=." \
+    CFLAGS="-O2 -g0 -ffile-prefix-map=$source_dir=. -ffile-prefix-map=$build_dir=." \
+    CXXFLAGS="-O2 -g0 -ffile-prefix-map=$source_dir=. -ffile-prefix-map=$build_dir=." \
     CPPFLAGS="-isysroot $sdk_root" \
     LDFLAGS="-isysroot $sdk_root" \
     CC="$cc" CXX="$cxx" \
-    "$repo_dir/configure" \
+    "$source_dir/configure" \
         --prefix=/usr/local \
         --enable-dedicated \
         --disable-authentication \
@@ -126,13 +126,13 @@ printf '%s\n' '#include <libxml/parser.h>' 'int main(void) { xmlCheckVersion(LIB
 )
 
 cp "$build_dir/src/armagetronad-dedicated" "$stage_dir/armagetronad-dedicated"
-cp -R "$repo_dir/config/." "$stage_dir/data/config/"
-cp "$arena_dir/config/arena.cfg" "$stage_dir/data/config/arena.cfg"
-cp -R "$repo_dir/language/." "$stage_dir/data/language/"
+cp -R "$source_dir/config/." "$stage_dir/data/config/"
+cp "$source_dir/arena/config/arena.cfg" "$stage_dir/data/config/arena.cfg"
+cp -R "$source_dir/language/." "$stage_dir/data/language/"
 cp "$build_dir/language/languages.txt" "$stage_dir/data/language/languages.txt"
-cp "$repo_dir/resource/proto/AATeam/map-0.2.8.0_rc4.dtd" \
+cp "$source_dir/resource/proto/AATeam/map-0.2.8.0_rc4.dtd" \
     "$stage_dir/data/resource/AATeam/map-0.2.8.0_rc4.dtd"
-cp "$repo_dir/resource/proto/Z-Man/sumo_4x4.aamap.xml" \
+cp "$source_dir/resource/proto/Z-Man/sumo_4x4.aamap.xml" \
     "$stage_dir/data/resource/Z-Man/fortress/sumo_4x4-0.1.1.aamap.xml"
 
 {
@@ -147,13 +147,11 @@ cp "$repo_dir/resource/proto/Z-Man/sumo_4x4.aamap.xml" \
     echo "pkgconf=$(pkgconf --version)"
     "$cc" --version | sed -n '1p'
     "$cxx" --version | sed -n '1p'
-    autoconf --version | sed -n '1p'
-    automake --version | sed -n '1p'
     make --version | sed -n '1p'
     echo "source_date_epoch=$SOURCE_DATE_EPOCH"
     echo "source_base=$ARENA_SOURCE_COMMIT"
     git -C "$repo_dir" rev-parse HEAD
-    git -C "$repo_dir" status --short
+    echo "prepared_source=$source_dir"
 } >"$evidence_dir/toolchain.txt"
 
 (

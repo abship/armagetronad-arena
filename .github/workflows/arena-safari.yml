@@ -36,11 +36,14 @@ jobs:
             src/tron/gArena.cpp src/tron/gCycle.cpp src/tron/gCycleMovement.cpp \
             src/tron/gSpawn.cpp src/tron/gWall.cpp)"
           ./arena/build-web.sh --platform linux/amd64
+          ./arena/prepare-macos-source.sh
       - name: Upload Wasm input
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: arena-safari-web-input
-          path: build/web/
+          path: |
+            build/web/
+            build/macos-source/
           if-no-files-found: error
           retention-days: 3
 
@@ -58,9 +61,9 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: arena-safari-web-input
-          path: build/web
+          path: build
       - name: Build same-source macOS interoperability server
-        run: ./arena/build-native-macos.sh
+        run: ARENA_MACOS_SOURCE_DIR="$PWD/build/macos-source" ./arena/build-native-macos.sh
       - name: Run authoritative two-client Safari 1v1
         run: ./arena/ci-safari.sh
       - name: Check patch whitespace
