@@ -62,8 +62,8 @@ and re-finds the canvas before every state read, render capture, and W3C input;
 all Linux render, input, traffic, and authoritative-result assertions remain in
 force.
 
-The hosted Intel Mac runs a same-source native dedicated server only for this
-Safari loopback interoperability proof. `arena/build-native-macos.sh` fails
-closed on the exact recorded runner image, Safari, Xcode, pkgconf, Python, and
-SDK libxml2 versions. It does not redefine or replace the pinned linux/amd64
-production-native artifact.
+The hosted Apple-silicon `macos-15`/`arm64` runner runs a same-source native
+dedicated server only for this Safari loopback interoperability proof.
+`arena/build-native-macos.sh` fails closed on the exact recorded runner image,
+architecture, Safari, Xcode, pkgconf, Python, and SDK libxml2 versions. It does
+not redefine or replace the pinned linux/amd64 production-native artifact.

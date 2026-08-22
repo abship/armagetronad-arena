@@ -22,7 +22,8 @@ fail() {
 }
 
 test "$(uname -s)" = Darwin || fail 'requires macOS'
-test "$(uname -m)" = x86_64 || fail 'requires the macos-15-intel runner'
+test "$(uname -m)" = "$MACOS_INTEROP_ARCH" || \
+    fail "expected architecture $MACOS_INTEROP_ARCH, got $(uname -m)"
 test "${ImageOS-}" = "$MACOS_INTEROP_IMAGE_OS" || \
     fail "expected ImageOS=$MACOS_INTEROP_IMAGE_OS, got ${ImageOS-unset}"
 test "${ImageVersion-}" = "$MACOS_INTEROP_IMAGE_VERSION" || \
@@ -141,6 +142,7 @@ cp "$source_dir/resource/proto/Z-Man/sumo_4x4.aamap.xml" \
     echo 'purpose=Safari CI interoperability only; not the linux/amd64 production native build'
     echo "image_os=$ImageOS"
     echo "image_version=$ImageVersion"
+    echo "architecture=$(uname -m)"
     echo "developer_dir=$DEVELOPER_DIR"
     xcodebuild -version
     echo "sdk_root=$sdk_root"

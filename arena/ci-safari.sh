@@ -7,8 +7,8 @@ arena_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_dir=$(dirname "$arena_dir")
 . "$arena_dir/pins.env"
 
-test "$(uname -s)" = Darwin && test "$(uname -m)" = x86_64 || {
-    echo "Safari interoperability requires an Intel macOS runner" >&2
+test "$(uname -s)" = Darwin && test "$(uname -m)" = "$MACOS_INTEROP_ARCH" || {
+    echo "Safari interoperability requires macOS/$MACOS_INTEROP_ARCH" >&2
     exit 1
 }
 test "${ImageVersion-}" = "$MACOS_INTEROP_IMAGE_VERSION"
