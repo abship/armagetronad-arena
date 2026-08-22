@@ -64,6 +64,7 @@ output_dir=$repo_dir/build/native-macos-interoperability
 build_dir=$output_dir/build
 stage_dir=$output_dir/stage
 evidence_dir=$output_dir/evidence
+install_dir=$output_dir/install
 test ! -L "$repo_dir/build" && test ! -L "$output_dir" || \
     fail 'refusing symlinked build path'
 rm -rf "$output_dir"
@@ -123,9 +124,10 @@ printf '%s\n' '#include <libxml/parser.h>' 'int main(void) { xmlCheckVersion(LIB
         --disable-uninstall \
         --disable-useradd
     make -j2
+    make DESTDIR="$install_dir" install
 )
 
-cp "$build_dir/src/armagetronad-dedicated" "$stage_dir/armagetronad-dedicated"
+cp "$install_dir/usr/local/bin/armagetronad-dedicated" "$stage_dir/armagetronad-dedicated"
 cp -R "$source_dir/config/." "$stage_dir/data/config/"
 cp "$source_dir/arena/config/arena.cfg" "$stage_dir/data/config/arena.cfg"
 cp -R "$source_dir/language/." "$stage_dir/data/language/"
