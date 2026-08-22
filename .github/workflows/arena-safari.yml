@@ -43,7 +43,7 @@ jobs:
           name: arena-safari-web-input
           path: |
             build/web/
-            build/macos-source/
+            build/macos-source.tar.gz
           if-no-files-found: error
           retention-days: 3
 
@@ -62,6 +62,8 @@ jobs:
         with:
           name: arena-safari-web-input
           path: build
+      - name: Restore prepared source modes
+        run: tar -xzf build/macos-source.tar.gz -C build
       - name: Build same-source macOS interoperability server
         run: ARENA_MACOS_SOURCE_DIR="$PWD/build/macos-source" ./arena/build-native-macos.sh
       - name: Run authoritative two-client Safari 1v1

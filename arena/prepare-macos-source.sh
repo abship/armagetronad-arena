@@ -41,3 +41,12 @@ test -x "$output_dir/configure"
 for file in compile config.guess config.sub depcomp install-sh missing; do
     test -f "$output_dir/$file" && test ! -L "$output_dir/$file"
 done
+
+archive="$repo_dir/build/macos-source.tar.gz"
+rm -f "$archive"
+docker run --rm --platform linux/amd64 \
+    -e "SOURCE_DATE_EPOCH=$ARENA_SOURCE_DATE_EPOCH" \
+    -v "$repo_dir/build:/out" \
+    "$NATIVE_IMAGE_LINUX_AMD64" \
+    sh -c 'cd /out && tar --sort=name --mtime="@$SOURCE_DATE_EPOCH" --owner=0 --group=0 --numeric-owner -cf - macos-source | gzip -n > macos-source.tar.gz'
+test -f "$archive"
