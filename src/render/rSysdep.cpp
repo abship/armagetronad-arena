@@ -668,7 +668,8 @@ void rSysDep::SwapGL(){
     EM_ASM({
         var inputStatus = Module['arenaInputStatus'];
         if ( Module['arenaCaptureRequested'] &&
-                inputStatus && inputStatus['localObjectAlive'] )
+                ( Module['arenaCaptureRequireAlive'] === false ||
+                  ( inputStatus && inputStatus['localObjectAlive'] ) ) )
         {
             Module['arenaCaptureRequested'] = false;
             try

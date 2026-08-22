@@ -500,13 +500,19 @@ return document.querySelectorAll('iframe').length;
                 value["gl"].get("drawingBufferWidth", 0) > 0 and
                 value["gl"].get("drawingBufferHeight", 0) > 0,
             )
-            first_capture = wait_for(
-                lambda: capture_canvas(
-                    args.webdriver_url, select_client(args.webdriver_url, sessions[0])
-                ),
-                15,
-                "first Safari client nonblank upstream preflight frame",
-            )
+            execute(args.webdriver_url, session,
+                    "Module['arenaCaptureRequireAlive'] = false; return true;")
+            try:
+                first_capture = wait_for(
+                    lambda: capture_canvas(
+                        args.webdriver_url, select_client(args.webdriver_url, sessions[0])
+                    ),
+                    15,
+                    "first Safari client nonblank upstream preflight frame",
+                )
+            finally:
+                execute(args.webdriver_url, session,
+                        "Module['arenaCaptureRequireAlive'] = true; return true;")
             (evidence_dir / "safari1-preflight.png").write_bytes(first_capture["png"])
             client_urls.append(make_client_url(2))
             request(args.webdriver_url, "POST", "/session/{0}/frame".format(session), {"id": None})
