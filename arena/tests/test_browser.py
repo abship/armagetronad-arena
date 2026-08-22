@@ -604,10 +604,10 @@ return document.querySelectorAll('iframe').length;
             key_name = "KeyA" if number == 0 else "KeyD"
             evidence.append({
                 "player": player,
-                "action": ("KeyA,KeyA,KeyA" if args.parity_role_schedule and number == 0 else
+                "action": ("KeyA" if args.parity_role_schedule and number == 0 else
                            "" if args.parity_role_schedule else
                            key_name + "," + ("KeyD" if number == 0 else "KeyA")),
-                "actionCount": (3 if args.parity_role_schedule and number == 0 else
+                "actionCount": (1 if args.parity_role_schedule and number == 0 else
                                 0 if args.parity_role_schedule else 2),
                 "initialState": state,
             })
@@ -668,11 +668,9 @@ return document.querySelectorAll('iframe').length;
             )
             time.sleep(0.20)
             send_client_turn(args.webdriver_url, sessions[0], "a")
-            send_client_turn(args.webdriver_url, sessions[0], "a")
-            send_client_turn(args.webdriver_url, sessions[0], "a")
             setup_states = []
             for index, client in enumerate(sessions):
-                expected = 3 if index == 0 else 0
+                expected = 1 if index == 0 else 0
                 setup_states.append(wait_for_state(
                     args.webdriver_url, client, 15,
                     client[1] + " exact setup controls",
@@ -729,12 +727,10 @@ return document.querySelectorAll('iframe').length;
         for client in sessions:
             arm_frame_metrics(args.webdriver_url, client)
 
-        # The parity schedule deliberately drives role1 into its own trail;
-        # role2 receives no input, making the authoritative winner role2.
+        # The parity fixture turns role1 into a static rail; role2 receives no
+        # input and remains on the long straight lane.
         if args.parity_role_schedule:
             time.sleep(0.20)
-            send_client_turn(args.webdriver_url, sessions[0], "a")
-            send_client_turn(args.webdriver_url, sessions[0], "a")
             send_client_turn(args.webdriver_url, sessions[0], "a")
         else:
             send_client_turn(args.webdriver_url, sessions[1], "d")
@@ -748,11 +744,11 @@ return document.querySelectorAll('iframe').length;
             _session, player, _frame = client
             if args.parity_role_schedule and index == 0:
                 input_pass = (lambda value: value.get("input") and
-                              value["input"].get("keyDown", 0) == 3 and
-                              value["input"].get("keyUp", 0) == 3 and
-                              value["input"].get("sdlKeyDown", 0) == 3 and
-                              value["input"].get("sdlKeyUp", 0) == 3 and
-                              value["input"].get("acceptedActions", 0) == 3)
+                              value["input"].get("keyDown", 0) == 1 and
+                              value["input"].get("keyUp", 0) == 1 and
+                              value["input"].get("sdlKeyDown", 0) == 1 and
+                              value["input"].get("sdlKeyUp", 0) == 1 and
+                              value["input"].get("acceptedActions", 0) == 1)
             elif args.parity_role_schedule:
                 input_pass = (lambda value: value.get("input") and
                               value["input"].get("keyDown", 0) == 0 and

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE Resource SYSTEM "AATeam/map-0.2.8.0_rc4.dtd">
+<Resource type="aamap" name="forced_left" version="1.0.0" author="Arena" category="parity">
+  <Map version="2">
+    <!-- GPLv2+. Test-only parity fixture: both straight lanes are safe for
+         minutes; one accepted turn reaches a static rail with wide timing
+         margin. The two lanes are symmetric, so spawn assignment is immaterial. -->
+    <Settings>
+      <Setting name="MAP_FILE_OVERRIDE" value="0" />
+      <Setting name="SPAWN_POINT_GROUP_SIZE" value="1" />
+    </Settings>
+    <World>
+      <Field>
+        <Spawn x="1000" y="1000" xdir="1" ydir="0" />
+        <Spawn x="1000" y="3000" xdir="1" ydir="0" />
+
+        <Wall>
+          <Point x="0" y="0" />
+          <Point x="0" y="10000" />
+          <Point x="10000" y="10000" />
+          <Point x="10000" y="0" />
+          <Point x="0" y="0" />
+        </Wall>
+
+        <Wall><Point x="0" y="900" /><Point x="9000" y="900" /></Wall>
+        <Wall><Point x="0" y="1100" /><Point x="9000" y="1100" /></Wall>
+        <Wall><Point x="0" y="2900" /><Point x="9000" y="2900" /></Wall>
+        <Wall><Point x="0" y="3100" /><Point x="9000" y="3100" /></Wall>
+      </Field>
+    </World>
+  </Map>
+</Resource>

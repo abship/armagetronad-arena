@@ -21,7 +21,8 @@ class ParityTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(relative.encode("ascii"))
         for relative in ("arena/config/arena.cfg", "arena/config/native-parity.cfg",
-                         "arena/config/parity-server.cfg"):
+                         "arena/config/parity-server.cfg",
+                         "arena/resource/Arena/parity/forced_left-1.0.0.aamap.xml"):
             path = root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes((relative + "\n").encode("ascii"))
@@ -34,16 +35,18 @@ class ParityTests(unittest.TestCase):
         return {
             "schema": PARITY.SCHEMA, "trial": index, "sourceCommit": "a" * 40,
             "attempt": 1,
-            "buildSha256": {"nativeClient": "b" * 64,
-                            "nativeServer": "2" * 64, "webWasm": "3" * 64},
+            "buildSha256": {
+                name: str(position + 1) * 64
+                for position, name in enumerate(PARITY.BUILD_PATHS)
+            },
             "configSha256": "c" * 64,
             "inputSchedule": PARITY.INPUT_SCHEDULE,
             "inputScheduleSha256": PARITY.hashlib.sha256(
                 PARITY.INPUT_SCHEDULE.encode("ascii")).hexdigest(),
-            "nativeInput": {"role1KeyDown": 3, "role1KeyUp": 3,
-                            "role1AcceptedTurns": 3, "role2AcceptedTurns": 0},
-            "nativeSetupInput": {"role1KeyDown": 3, "role1KeyUp": 3,
-                                 "role1AcceptedTurns": 3, "role2AcceptedTurns": 0},
+            "nativeInput": {"role1KeyDown": 1, "role1KeyUp": 1,
+                            "role1AcceptedTurns": 1, "role2AcceptedTurns": 0},
+            "nativeSetupInput": {"role1KeyDown": 1, "role1KeyUp": 1,
+                                 "role1AcceptedTurns": 1, "role2AcceptedTurns": 0},
             "nativeBoundary": {"setupNewMatch": 1, "measuredNewMatch": 2},
             "browserBoundary": {"setupNewMatch": 1, "measuredNewMatch": 2},
             "rawSha256": raw,
@@ -65,18 +68,18 @@ class ParityTests(unittest.TestCase):
             path = raw_dir / name
             path.parent.mkdir(parents=True, exist_ok=True)
             if name in ("native/input-role1.log", "native/setup-input-role1.log"):
-                data = ("KEY 1 97 0 1\nKEY 0 97 0 1\nACTION CYCLE_TURN_LEFT 1 1 1\n") * 3
+                data = "KEY 1 97 0 1\nKEY 0 97 0 1\nACTION CYCLE_TURN_LEFT 1 1 1\n"
             elif name in ("native/input-role2.log", "native/setup-input-role2.log"):
                 data = ""
             elif name == "browser/states.json":
                 data = json.dumps([
                     {"player": "role1",
                      "setupInputState": {"input": {
-                         "keyDown": 3, "keyUp": 3, "sdlKeyDown": 3,
-                         "sdlKeyUp": 3, "acceptedActions": 3}},
+                         "keyDown": 1, "keyUp": 1, "sdlKeyDown": 1,
+                         "sdlKeyUp": 1, "acceptedActions": 1}},
                      "finalState": {"input": {
-                         "keyDown": 3, "keyUp": 3, "sdlKeyDown": 3,
-                         "sdlKeyUp": 3, "acceptedActions": 3}}},
+                         "keyDown": 1, "keyUp": 1, "sdlKeyDown": 1,
+                         "sdlKeyUp": 1, "acceptedActions": 1}}},
                     {"player": "role2",
                      "setupInputState": {"input": {
                          "keyDown": 0, "keyUp": 0, "sdlKeyDown": 0,

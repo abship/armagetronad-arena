@@ -20,15 +20,18 @@ SDL path under isolated Xvfb displays. This image does not replace or modify the
 production linux/amd64 dedicated artifact.
 
 Both arms use the versioned schedule
-`setup:start-new-match,wait(200ms),role1:a(120ms)x3;boundary:first-post-command-new-match,reset-input-evidence;measured:wait(200ms),role1:a(120ms)x3,role2:none`.
+`setup:start-new-match,wait(200ms),role1:a(120ms)x1;boundary:first-post-command-new-match,reset-input-evidence;measured:wait(200ms),role1:a(120ms)x1,role2:none`.
 The setup turns end the upstream one-client startup round after both clients
 connect; the existing `START_NEW_MATCH` console command makes the first
 following `NEW_MATCH` the explicit measured boundary. Each arm records that
 boundary as ordinal 2 or 3, depending on whether a role1-only pre-admission
 round elapsed while the second client started. Input evidence is recorded and
 then reset at that boundary. In the measured round role1 first travels straight
-for 200 ms, then each `a` is held for 120 ms and the next begins immediately
-after release. The three left turns close a small upstream trail loop.
+for 200 ms, then `a` is held for 120 ms. The parity-only `forced_left` map has
+two symmetric, zone-free straight lanes in a large rim. An unsteered role2 is
+safe for minutes, while the one accepted role1 turn reaches a static lane rail
+with a wide timing margin. Thus client scheduler latency cannot choose the
+winner, and absence of the action cannot produce the required result.
 
 The harness requires all setup and measured turns to be delivered and accepted,
 exactly one entry for each role, only the bounded optional pre-admission round,

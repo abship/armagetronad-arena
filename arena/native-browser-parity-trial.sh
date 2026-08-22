@@ -202,10 +202,10 @@ record = {"schema": "arena-native-browser-parity-v1", "trial": index,
           "configSha256": manifest["configSha256"],
           "inputSchedule": manifest["inputSchedule"],
           "inputScheduleSha256": manifest["inputScheduleSha256"],
-          "nativeInput": {"role1KeyDown": 3, "role1KeyUp": 3,
-                          "role1AcceptedTurns": 3, "role2AcceptedTurns": 0},
-          "nativeSetupInput": {"role1KeyDown": 3, "role1KeyUp": 3,
-                               "role1AcceptedTurns": 3, "role2AcceptedTurns": 0},
+          "nativeInput": {"role1KeyDown": 1, "role1KeyUp": 1,
+                          "role1AcceptedTurns": 1, "role2AcceptedTurns": 0},
+          "nativeSetupInput": {"role1KeyDown": 1, "role1KeyUp": 1,
+                               "role1AcceptedTurns": 1, "role2AcceptedTurns": 0},
           "nativeBoundary": native_boundary,
           "browserBoundary": browser_boundary,
           "rawSha256": {name: digest(path) for name, path in raw.items()},
@@ -239,6 +239,7 @@ run_native() {
     docker run --rm -i --name "arena-parity-native-server-$index" --network host \
         -v "$dir/server:/arena/var" \
         -v "$arena_dir/config/parity-server.cfg:/arena/data/config/parity-server.cfg:ro" \
+        -v "$arena_dir/resource/Arena:/arena/data/resource/Arena:ro" \
         arena-native-runtime:parity \
         --datadir /arena/data --configdir /arena/data/config --userconfigdir /arena/var \
         --vardir /arena/var --resourcedir /arena/data/resource \
@@ -252,7 +253,9 @@ run_native() {
             -e DISPLAY="$display" \
             -e ARENA_PARITY_HOST=127.0.0.1 -e ARENA_PARITY_PORT=4534 \
             -e ARENA_PARITY_INPUT_EVIDENCE=/arena/var/input-evidence.log \
-            -v "$dir/role$role:/arena/var" "$ARENA_NATIVE_PARITY_IMAGE" \
+            -v "$dir/role$role:/arena/var" \
+            -v "$arena_dir/resource/Arena:/arena/data/resource/Arena:ro" \
+            "$ARENA_NATIVE_PARITY_IMAGE" \
             -ec 'Xvfb "$DISPLAY" -screen 0 800x600x24 & xvfb=$!; sleep 1; kill -0 "$xvfb"; exec /usr/local/bin/armagetronad -w --datadir /arena/data --configdir /arena/data/config --userconfigdir /arena/var --vardir /arena/var --resourcedir /arena/data/resource --autoresourcedir /arena/var/resource-cache' >/dev/null
     done
     wait_log "$dir/server/ladderlog.txt" '^PLAYER_ENTERED role1'
@@ -272,8 +275,6 @@ run_native() {
     docker exec "arena-parity-native-role1-$index" sh -ec '
         window=$(xdotool search --onlyvisible --name Armagetron | head -n 1)
         xdotool windowfocus "$window"
-        xdotool keydown a; sleep 0.12; xdotool keyup a
-        xdotool keydown a; sleep 0.12; xdotool keyup a
         xdotool keydown a; sleep 0.12; xdotool keyup a
     '
     measured_new_match=$((baseline_new_matches + 1))
@@ -302,8 +303,6 @@ run_native() {
         window=$(xdotool search --onlyvisible --name Armagetron | head -n 1)
         xdotool windowfocus "$window"
         xdotool keydown a; sleep 0.12; xdotool keyup a
-        xdotool keydown a; sleep 0.12; xdotool keyup a
-        xdotool keydown a; sleep 0.12; xdotool keyup a
     '
     python3 - "$dir/role1/input-evidence.log" "$dir/role2/input-evidence.log" <<'PY'
 import pathlib, sys, time
@@ -319,7 +318,7 @@ def counts(path):
 
 deadline = time.monotonic() + 5
 while time.monotonic() < deadline:
-    if counts(sys.argv[1]) == (3, 3, 3) and counts(sys.argv[2]) == (0, 0, 0):
+    if counts(sys.argv[1]) == (1, 1, 1) and counts(sys.argv[2]) == (0, 0, 0):
         break
     time.sleep(0.05)
 else:
@@ -344,6 +343,7 @@ run_browser() {
     docker run --rm -i --name "arena-parity-browser-server-$index" --network host \
         -e ARENA_ROSTER_DIR=/arena/roster -v "$dir/server:/arena/var" -v "$dir/roster:/arena/roster:ro" \
         -v "$arena_dir/config/parity-server.cfg:/arena/data/config/parity-server.cfg:ro" \
+        -v "$arena_dir/resource/Arena:/arena/data/resource/Arena:ro" \
         arena-native-runtime:parity \
         --datadir /arena/data --configdir /arena/data/config --userconfigdir /arena/var \
         --vardir /arena/var --resourcedir /arena/data/resource \

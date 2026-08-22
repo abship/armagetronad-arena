@@ -14,12 +14,15 @@ SCHEMA = "arena-native-browser-parity-v1"
 INPUT_SCHEMA = "arena-native-browser-parity-inputs-v1"
 EXPECTED_EVENTS = ["NEW_MATCH", "DEATH_SUICIDE", "ROUND_WINNER",
                    "MATCH_WINNER", "GAME_END"]
-INPUT_SCHEDULE = ("setup:start-new-match,wait(200ms),role1:a(120ms)x3;"
+INPUT_SCHEDULE = ("setup:start-new-match,wait(200ms),role1:a(120ms)x1;"
                   "boundary:first-post-command-new-match,reset-input-evidence;"
-                  "measured:wait(200ms),role1:a(120ms)x3,role2:none")
+                  "measured:wait(200ms),role1:a(120ms)x1,role2:none")
 BUILD_PATHS = {
     "nativeClient": "build/native-parity/amd64/armagetronad",
+    "nativeClientImage": "build/native-parity/amd64/image.tar",
     "nativeServer": "build/native/amd64/armagetronad-dedicated",
+    "nativeServerImage": "build/native-parity/amd64/server-image.tar",
+    "webData": "build/web/armagetronad_main.data",
     "webWasm": "build/web/armagetronad_main.wasm",
 }
 RAW_PATHS = {
@@ -63,7 +66,8 @@ def file_sha256(path):
 def config_sha256(repo_dir):
     digest = hashlib.sha256()
     for relative in ("arena/config/arena.cfg", "arena/config/native-parity.cfg",
-                     "arena/config/parity-server.cfg"):
+                     "arena/config/parity-server.cfg",
+                     "arena/resource/Arena/parity/forced_left-1.0.0.aamap.xml"):
         digest.update((repo_dir / relative).read_bytes())
     return digest.hexdigest()
 
@@ -220,7 +224,8 @@ def validate_record(record, index, source_commit=None, input_manifest=None):
         raise ValueError("trial {0}: retry/attempt count differs".format(index))
     build_digests = record.get("buildSha256")
     if not isinstance(build_digests, dict) or set(build_digests) != {
-            "nativeClient", "nativeServer", "webWasm"}:
+            "nativeClient", "nativeClientImage", "nativeServer",
+            "nativeServerImage", "webData", "webWasm"}:
         raise ValueError("trial {0}: build digest set differs".format(index))
     for name, digest in build_digests.items():
         if not isinstance(digest, str) or not SHA256.fullmatch(digest):
@@ -239,12 +244,12 @@ def validate_record(record, index, source_commit=None, input_manifest=None):
             if record.get(name) != input_manifest.get(name):
                 raise ValueError("trial {0}: {1} differs from input manifest".format(index, name))
     if record.get("nativeInput") != {
-            "role1KeyDown": 3, "role1KeyUp": 3,
-            "role1AcceptedTurns": 3, "role2AcceptedTurns": 0}:
+            "role1KeyDown": 1, "role1KeyUp": 1,
+            "role1AcceptedTurns": 1, "role2AcceptedTurns": 0}:
         raise ValueError("trial {0}: native accepted input proof differs".format(index))
     if record.get("nativeSetupInput") != {
-            "role1KeyDown": 3, "role1KeyUp": 3,
-            "role1AcceptedTurns": 3, "role2AcceptedTurns": 0}:
+            "role1KeyDown": 1, "role1KeyUp": 1,
+            "role1AcceptedTurns": 1, "role2AcceptedTurns": 0}:
         raise ValueError("trial {0}: native setup input proof differs".format(index))
     for name in ("nativeBoundary", "browserBoundary"):
         try:
@@ -309,26 +314,26 @@ def verify(evidence_dir, indices, source_commit=None, input_manifest=None):
                 raise ValueError("trial {0}: raw evidence digest differs: {1}".format(index, relative))
         role1 = native_input_counts(raw_dir / "native/input-role1.log")
         role2 = native_input_counts(raw_dir / "native/input-role2.log")
-        if role1 != {"keyDown": 3, "keyUp": 3, "acceptedTurns": 3} or \
+        if role1 != {"keyDown": 1, "keyUp": 1, "acceptedTurns": 1} or \
                 role2 != {"keyDown": 0, "keyUp": 0, "acceptedTurns": 0}:
             raise ValueError("trial {0}: raw native input proof differs".format(index))
         setup_role1 = native_input_counts(raw_dir / "native/setup-input-role1.log")
         setup_role2 = native_input_counts(raw_dir / "native/setup-input-role2.log")
-        if setup_role1 != {"keyDown": 3, "keyUp": 3, "acceptedTurns": 3} or \
+        if setup_role1 != {"keyDown": 1, "keyUp": 1, "acceptedTurns": 1} or \
                 setup_role2 != {"keyDown": 0, "keyUp": 0, "acceptedTurns": 0}:
             raise ValueError("trial {0}: raw native setup input proof differs".format(index))
         browser_inputs = browser_input_counts(raw_dir / "browser/states.json", "finalState")
         if browser_inputs != {
-                "role1": {"keyDown": 3, "keyUp": 3, "sdlKeyDown": 3,
-                          "sdlKeyUp": 3, "acceptedTurns": 3},
+                "role1": {"keyDown": 1, "keyUp": 1, "sdlKeyDown": 1,
+                          "sdlKeyUp": 1, "acceptedTurns": 1},
                 "role2": {"keyDown": 0, "keyUp": 0, "sdlKeyDown": 0,
                           "sdlKeyUp": 0, "acceptedTurns": 0}}:
             raise ValueError("trial {0}: raw browser input proof differs".format(index))
         browser_setup_inputs = browser_input_counts(
             raw_dir / "browser/states.json", "setupInputState")
         if browser_setup_inputs != {
-                "role1": {"keyDown": 3, "keyUp": 3, "sdlKeyDown": 3,
-                          "sdlKeyUp": 3, "acceptedTurns": 3},
+                "role1": {"keyDown": 1, "keyUp": 1, "sdlKeyDown": 1,
+                          "sdlKeyUp": 1, "acceptedTurns": 1},
                 "role2": {"keyDown": 0, "keyUp": 0, "sdlKeyDown": 0,
                           "sdlKeyUp": 0, "acceptedTurns": 0}}:
             raise ValueError("trial {0}: raw browser setup input proof differs".format(index))
