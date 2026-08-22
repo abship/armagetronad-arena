@@ -8,24 +8,13 @@ repo_dir=$(dirname "$arena_dir")
 
 platform=${ARENA_BUILD_PLATFORM:-$ARENA_DEFAULT_PLATFORM}
 output_dir="$repo_dir/build/release"
-while test "$#" -gt 0; do
-    case "$1" in
-        --platform)
-            test "$#" -ge 2 || { echo "missing --platform value" >&2; exit 2; }
-            platform=$2
-            shift 2
-            ;;
-        --output)
-            test "$#" -ge 2 || { echo "missing --output value" >&2; exit 2; }
-            output_dir=$2
-            shift 2
-            ;;
-        *)
-            echo "usage: $0 [--platform linux/amd64|linux/arm64] [--output DIR]" >&2
-            exit 2
-            ;;
-    esac
-done
+if test "$#" -gt 0; then
+    test "$#" -eq 2 && test "$1" = "--platform" || {
+        echo "usage: $0 [--platform linux/amd64|linux/arm64]" >&2
+        exit 2
+    }
+    platform=$2
+fi
 
 case "$platform" in
     linux/amd64)
@@ -44,8 +33,17 @@ head=$(git -C "$repo_dir" rev-parse HEAD)
 tree=$(git -C "$repo_dir" rev-parse 'HEAD^{tree}')
 test "$(git -C "$repo_dir" rev-parse "$ARENA_SOURCE_TAG^{}")" = "$ARENA_SOURCE_COMMIT"
 git -C "$repo_dir" merge-base --is-ancestor "$ARENA_SOURCE_COMMIT" "$head"
-git -C "$repo_dir" diff --quiet
-git -C "$repo_dir" diff --cached --quiet
+test -z "$(git -C "$repo_dir" status --porcelain --untracked-files=all)" || {
+    echo "source tree has tracked or untracked changes" >&2
+    exit 1
+}
+ignored_inputs=$(git -C "$repo_dir" ls-files --others --ignored --exclude-standard \
+    | sed '\#^build/#d')
+test -z "$ignored_inputs" || {
+    echo "source tree has ignored inputs outside build/" >&2
+    printf '%s\n' "$ignored_inputs" >&2
+    exit 1
+}
 
 native_dir="$repo_dir/build/native/$architecture"
 web_dir="$repo_dir/build/web"
@@ -55,14 +53,6 @@ test -f "$web_dir/SHA256SUMS"
 (cd "$native_dir" && sha256sum -c SHA256SUMS)
 (cd "$web_dir" && sha256sum -c SHA256SUMS)
 
-case "$output_dir" in
-    /*) ;;
-    *) output_dir="$repo_dir/$output_dir" ;;
-esac
-case "$output_dir" in
-    "$repo_dir/build/"*) ;;
-    *) echo "output must be below $repo_dir/build" >&2; exit 2 ;;
-esac
 rm -rf "$output_dir"
 mkdir -p "$output_dir/native-linux-$architecture" "$output_dir/web"
 
