@@ -34,7 +34,15 @@ artifact_dir="$repo_dir/build/web"
 rm -rf "$artifact_dir"
 mkdir -p "$artifact_dir"
 
-docker build \
+docker_build() {
+    if test "${ARENA_DOCKER_NO_CACHE:-0}" = 1; then
+        docker build --no-cache "$@"
+    else
+        docker build "$@"
+    fi
+}
+
+docker_build \
     --progress=plain \
     --platform "$platform" \
     --file "$arena_dir/docker/Dockerfile.web" \

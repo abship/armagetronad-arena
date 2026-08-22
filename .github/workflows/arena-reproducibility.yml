@@ -1,0 +1,46 @@
+# Copyright (C) 2026 Arena contributors. GPLv2+; see COPYING.txt.
+name: Arena same-source reproducibility
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reproducibility-linux-amd64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Check out exact candidate history
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          fetch-depth: 0
+
+      - name: Verify stable base and protected gameplay diff
+        shell: bash
+        run: |
+          test "$(git rev-parse 'v0.2.9.3.0^{}')" = 036daaf34f055b1efbcee6a4afc4d90a325ce569
+          git merge-base --is-ancestor 036daaf34f055b1efbcee6a4afc4d90a325ce569 HEAD
+          test -z "$(git diff --name-only 036daaf34f055b1efbcee6a4afc4d90a325ce569...HEAD -- \
+            src/engine/eGrid.cpp src/engine/eWall.cpp src/engine/eLagCompensation.cpp \
+            src/tron/gArena.cpp src/tron/gCycle.cpp src/tron/gCycleMovement.cpp \
+            src/tron/gSpawn.cpp src/tron/gWall.cpp)"
+
+      - name: Build twice and compare release bytes
+        run: ./arena/reproducibility-check.sh --platform linux/amd64
+
+      - name: Check patch whitespace
+        if: always()
+        run: git diff --check
+
+      - name: Upload exact-source release and reproducibility evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: arena-linux-amd64-reproducibility
+          path: |
+            build/reproducibility/
+            build/release/
+          if-no-files-found: warn
+          retention-days: 30

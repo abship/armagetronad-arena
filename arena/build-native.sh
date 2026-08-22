@@ -33,7 +33,15 @@ test -z "$(git -C "$repo_dir" diff --name-only "$ARENA_SOURCE_COMMIT" -- \
     src/tron/gSpawn.cpp src/tron/gWall.cpp)"
 
 image=armagetronad-arena-native:arm-1-$architecture
-docker build \
+docker_build() {
+    if test "${ARENA_DOCKER_NO_CACHE:-0}" = 1; then
+        docker build --no-cache "$@"
+    else
+        docker build "$@"
+    fi
+}
+
+docker_build \
     --quiet \
     --platform "$platform" \
     --file "$arena_dir/docker/Dockerfile.native" \

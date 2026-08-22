@@ -36,16 +36,18 @@ implied by a green Linux job.
 
 ## Current feasibility result
 
-Linux/amd64 run `32421697186` at source head `a26dc39c` passed the exact-base
-and forbidden-diff guard, pinned native and full upstream Wasm builds, and all
-relay/abuse tests. Two Chrome clients opened authenticated Arena sockets and
-exchanged complete binary datagrams, but both upstream clients trapped before
-`PLAYER_ENTERED`: one in `rConsole::DoPrint` while processing a network config
-message, and one in `tCallback::Exec` from the render per-frame task with a
-Wasm indirect-call signature mismatch. The server recorded both logins only as
-spectators and then timed them out; no `MATCH_WINNER` was produced.
+Linux/amd64 run `32538237257` at source head
+`fc0e4ba5bfa4af1009e1c94f6eefd36d7745e31c` passed the exact-base and
+forbidden-diff guard, pinned native and full upstream Wasm builds, all
+relay/auth/abuse tests, and the Chrome plus Firefox runtime gate. In each
+browser, two upstream C++ clients rendered nonblank 1280 by 720 canvas frames,
+accepted real W3C turn actions, exchanged datagrams in both directions, and
+completed an authoritative match with `PLAYER_ENTERED`, `MATCH_WINNER`, and
+`GAME_END` evidence. The retained artifact is `9466285334`, with artifact
+digest
+`01dcd6f693f2c21bdbd57148c1fd3926d569722a461ef1201d52e9db523fd4aa`.
 
-This repeated upstream C++ callback-ABI blocker exhausts the ARM-1 correction
-limit. Chrome/Firefox gameplay, Safari, native parity, shaped-loss/frame/memory,
-reproducibility, and release gates remain pending. ARM-1 feasibility is not a
-PASS, and no TypeScript gameplay substitute is permitted.
+This passes the Linux runtime gate only. Safari 1v1, 100-match native-client
+parity, the approved shaped-loss/frame/memory plan, same-source
+reproducibility, final release publication, and independent exact-SHA review
+remain separate ARM-1 gates. The Draft PR remains unmerged.
