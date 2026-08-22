@@ -23,6 +23,7 @@ BUILD_PATHS = {
     "nativeServer": "build/native/amd64/armagetronad-dedicated",
     "nativeServerImage": "build/native-parity/amd64/server-image.tar",
     "webData": "build/web/armagetronad_main.data",
+    "webJs": "build/web/armagetronad_main.js",
     "webWasm": "build/web/armagetronad_main.wasm",
 }
 RAW_PATHS = {
@@ -225,7 +226,7 @@ def validate_record(record, index, source_commit=None, input_manifest=None):
     build_digests = record.get("buildSha256")
     if not isinstance(build_digests, dict) or set(build_digests) != {
             "nativeClient", "nativeClientImage", "nativeServer",
-            "nativeServerImage", "webData", "webWasm"}:
+            "nativeServerImage", "webData", "webJs", "webWasm"}:
         raise ValueError("trial {0}: build digest set differs".format(index))
     for name, digest in build_digests.items():
         if not isinstance(digest, str) or not SHA256.fullmatch(digest):

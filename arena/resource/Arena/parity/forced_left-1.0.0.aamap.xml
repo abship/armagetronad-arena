@@ -4,7 +4,7 @@
   <Map version="2">
     <!-- GPLv2+. Test-only parity fixture: both straight lanes are safe for
          minutes; one accepted turn reaches a static rail with wide timing
-         margin. Mirrored render witnesses stay sealed behind the rails. -->
+         margin. The lanes are symmetric, so spawn assignment is immaterial. -->
     <Settings>
       <Setting name="MAP_FILE_OVERRIDE" value="0" />
       <Setting name="SPAWN_POINT_GROUP_SIZE" value="1" />
@@ -27,26 +27,6 @@
         <Wall height="4"><Point x="0" y="2960" /><Point x="9000" y="2960" /></Wall>
         <Wall height="4"><Point x="0" y="3040" /><Point x="9000" y="3040" /></Wall>
 
-        <!-- The legacy wall renderer is visually sparse in this camera. These
-             bright, static witnesses repeat along both paths so capture timing
-             cannot move past them. Every radius remains behind a continuous
-             collision rail; reaching one would already require dying. -->
-        <Zone effect="win"><ShapeCircle radius="100" growth="0"><Point x="1000" y="800" /></ShapeCircle></Zone>
-        <Zone effect="win"><ShapeCircle radius="100" growth="0"><Point x="2000" y="800" /></ShapeCircle></Zone>
-        <Zone effect="win"><ShapeCircle radius="100" growth="0"><Point x="3000" y="800" /></ShapeCircle></Zone>
-        <Zone effect="win"><ShapeCircle radius="100" growth="0"><Point x="4000" y="800" /></ShapeCircle></Zone>
-        <Zone effect="win"><ShapeCircle radius="100" growth="0"><Point x="5000" y="800" /></ShapeCircle></Zone>
-        <Zone effect="win"><ShapeCircle radius="100" growth="0"><Point x="6000" y="800" /></ShapeCircle></Zone>
-        <Zone effect="win"><ShapeCircle radius="100" growth="0"><Point x="7000" y="800" /></ShapeCircle></Zone>
-        <Zone effect="win"><ShapeCircle radius="100" growth="0"><Point x="8000" y="800" /></ShapeCircle></Zone>
-        <Zone effect="win"><ShapeCircle radius="100" growth="0"><Point x="1000" y="3200" /></ShapeCircle></Zone>
-        <Zone effect="win"><ShapeCircle radius="100" growth="0"><Point x="2000" y="3200" /></ShapeCircle></Zone>
-        <Zone effect="win"><ShapeCircle radius="100" growth="0"><Point x="3000" y="3200" /></ShapeCircle></Zone>
-        <Zone effect="win"><ShapeCircle radius="100" growth="0"><Point x="4000" y="3200" /></ShapeCircle></Zone>
-        <Zone effect="win"><ShapeCircle radius="100" growth="0"><Point x="5000" y="3200" /></ShapeCircle></Zone>
-        <Zone effect="win"><ShapeCircle radius="100" growth="0"><Point x="6000" y="3200" /></ShapeCircle></Zone>
-        <Zone effect="win"><ShapeCircle radius="100" growth="0"><Point x="7000" y="3200" /></ShapeCircle></Zone>
-        <Zone effect="win"><ShapeCircle radius="100" growth="0"><Point x="8000" y="3200" /></ShapeCircle></Zone>
       </Field>
     </World>
   </Map>

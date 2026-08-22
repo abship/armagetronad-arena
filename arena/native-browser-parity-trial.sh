@@ -229,6 +229,7 @@ run_native() {
     chmod 0777 "$dir/server" "$dir/role1" "$dir/role2"
     for role in 1 2; do
         cp "$arena_dir/config/native-parity.cfg" "$dir/role$role/user.cfg"
+        cp "$arena_dir/config/native-parity.cfg" "$dir/role$role/autoexec.cfg"
         printf '%s\n' "PLAYER_1 role$role" >>"$dir/role$role/user.cfg"
         : >"$dir/role$role/input-evidence.log"
     done

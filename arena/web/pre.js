@@ -14,6 +14,7 @@ Module['printErr'] = function(value) {
   else if (window.console && window.console.error) window.console.error(value);
 };
 var arenaSearch = new URLSearchParams(window.location.search);
+var arenaParityVisuals = arenaSearch.get('parity') === '1';
 var arenaRelayURL = arenaSearch.get('relay');
 if (arenaRelayURL && /^wss?:\/\//.test(arenaRelayURL)) {
   Module['arenaRelayURL'] = arenaRelayURL;
@@ -72,7 +73,13 @@ Module['preRun'].push(function() {
     // Character keys map directly across W3C Actions and Emscripten SDL1.
     '\nKEYBOARD 97 PLAYER_BIND CYCLE_TURN_LEFT 1' +
     '\nKEYBOARD 100 PLAYER_BIND CYCLE_TURN_RIGHT 1' +
-    '\nBIG_BROTHER 0\nSOUND_QUALITY 0\n');
+    '\nBIG_BROTHER 0\nSOUND_QUALITY 0' +
+    '\n');
+  if (arenaParityVisuals) {
+    // autoexec.cfg loads after settings_visual.cfg; user.cfg loads before it.
+    FS.writeFile('/user/var/autoexec.cfg',
+      'FLOOR_DETAIL 1\nFLOOR_RED 1\nFLOOR_GREEN .25\nFLOOR_BLUE .25\nGRID_SIZE 5\n');
+  }
 });
 Module['arguments'] = [
   '--datadir', '/data',

@@ -19,7 +19,7 @@ var context = {
     __arenaRecordError: function(value) { errors.push(String(value)); },
     console: { error: function() {} },
     location: {
-      search: '?relay=wss%3A%2F%2Frelay.invalid%2Fsocket&ticket=short-lived-ticket&player=Arena_1',
+      search: '?relay=wss%3A%2F%2Frelay.invalid%2Fsocket&ticket=short-lived-ticket&player=Arena_1&parity=1',
       pathname: '/client/',
       hash: '#view'
     },
@@ -43,6 +43,7 @@ assert.strictEqual(true, context.Module.arenaCaptureRequireAlive);
 assert.strictEqual(1, context.Module.GL_MAX_TEXTURE_IMAGE_UNITS);
 assert.ok(!replaced.includes('ticket='));
 assert.ok(replaced.includes('relay='));
+assert.ok(replaced.includes('parity=1'));
 context.Module.preRun[0]();
 assert.strictEqual('/user/var/user.cfg', writes[0][0]);
 assert.ok(writes[0][1].includes('PLAYER_1 Arena_1'));
@@ -53,6 +54,10 @@ assert.ok(writes[0][1].includes('KEYBOARD 100 PLAYER_BIND CYCLE_TURN_RIGHT 1'));
 assert.ok(!writes[0][1].includes('KEYBOARD 276 PLAYER_BIND'));
 assert.ok(!writes[0][1].includes('KEYBOARD 275 PLAYER_BIND'));
 assert.ok(writes[0][1].includes('SOUND_QUALITY 0'));
+assert.strictEqual('/user/var/autoexec.cfg', writes[1][0]);
+assert.ok(writes[1][1].includes('FLOOR_DETAIL 1'));
+assert.ok(writes[1][1].includes('FLOOR_RED 1'));
+assert.ok(writes[1][1].includes('GRID_SIZE 5'));
 assert.ok(!writes[0][1].includes('short-lived-ticket'));
 context.Module.printErr('diagnostic assertion');
 assert.deepStrictEqual(['diagnostic assertion'], errors);

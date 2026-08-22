@@ -492,13 +492,14 @@ def main():
         def make_client_url(number):
             player = ("role" + str(number)) if args.parity_role_schedule else (args.browser + str(number))[:16]
             ticket = RELAY.mint_ticket(secret, player, args.browser + ("-parity" if args.parity_role_schedule else "-1v1"))
-            query = urllib.parse.urlencode(
-                {
-                    "relay": args.relay_url,
-                    "ticket": ticket,
-                    "player": "forged" + str(number),
-                }
-            )
+            query_values = {
+                "relay": args.relay_url,
+                "ticket": ticket,
+                "player": "forged" + str(number),
+            }
+            if args.parity_role_schedule:
+                query_values["parity"] = "1"
+            query = urllib.parse.urlencode(query_values)
             return player, args.client_url + "?" + query
 
         client_urls = [make_client_url(1)]
