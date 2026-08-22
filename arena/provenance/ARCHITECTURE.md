@@ -51,3 +51,19 @@ This passes the Linux runtime gate only. Safari 1v1, 100-match native-client
 parity, the approved shaped-loss/frame/memory plan, same-source
 reproducibility, final release publication, and independent exact-SHA review
 remain separate ARM-1 gates. The Draft PR remains unmerged.
+
+## Safari interoperability topology
+
+SafariDriver permits one active automation session per Mac. The Safari lane
+therefore runs two visible, same-origin iframe documents inside one driver
+session. Each document loads its own upstream C++ Wasm module, canvas, socket,
+ticket, player identity, and client state. The harness switches frame context
+and re-finds the canvas before every state read, render capture, and W3C input;
+all Linux render, input, traffic, and authoritative-result assertions remain in
+force.
+
+The hosted Intel Mac runs a same-source native dedicated server only for this
+Safari loopback interoperability proof. `arena/build-native-macos.sh` fails
+closed on the exact recorded runner image, Safari, Xcode, pkgconf, Python, and
+SDK libxml2 versions. It does not redefine or replace the pinned linux/amd64
+production-native artifact.

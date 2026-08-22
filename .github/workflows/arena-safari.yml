@@ -1,0 +1,79 @@
+# Copyright (C) 2026 Arena contributors. GPLv2+; see COPYING.txt.
+name: Arena Safari interoperability
+
+on:
+  pull_request:
+    branches:
+      - arena/stable-0.2.9.3.0
+
+permissions:
+  contents: read
+
+env:
+  ARENA_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+
+concurrency:
+  group: arena-safari-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build-web-linux-amd64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out exact pull request head
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          fetch-depth: 0
+          ref: ${{ env.ARENA_CANDIDATE_SHA }}
+      - name: Verify candidate and build pinned Wasm client
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$ARENA_CANDIDATE_SHA"
+          test "$(git rev-parse 'v0.2.9.3.0^{}')" = 036daaf34f055b1efbcee6a4afc4d90a325ce569
+          test -z "$(git diff --name-only 036daaf34f055b1efbcee6a4afc4d90a325ce569...HEAD -- \
+            src/engine/eGrid.cpp src/engine/eWall.cpp src/engine/eLagCompensation.cpp \
+            src/tron/gArena.cpp src/tron/gCycle.cpp src/tron/gCycleMovement.cpp \
+            src/tron/gSpawn.cpp src/tron/gWall.cpp)"
+          ./arena/build-web.sh --platform linux/amd64
+      - name: Upload Wasm input
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: arena-safari-web-input
+          path: build/web/
+          if-no-files-found: error
+          retention-days: 3
+
+  safari-macos-interoperability:
+    needs: build-web-linux-amd64
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    steps:
+      - name: Check out exact pull request head
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          fetch-depth: 0
+          ref: ${{ env.ARENA_CANDIDATE_SHA }}
+      - name: Download pinned Wasm client
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: arena-safari-web-input
+          path: build/web
+      - name: Build same-source macOS interoperability server
+        run: ./arena/build-native-macos.sh
+      - name: Run authoritative two-client Safari 1v1
+        run: ./arena/ci-safari.sh
+      - name: Check patch whitespace
+        if: always()
+        run: git diff --check
+      - name: Upload Safari evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: arena-safari-interoperability
+          path: |
+            build/native-macos-interoperability/evidence/
+            build/native-macos-interoperability/SHA256SUMS
+            build/runtime/
+          if-no-files-found: warn
+          retention-days: 14

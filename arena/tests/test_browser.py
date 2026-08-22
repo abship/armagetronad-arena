@@ -70,12 +70,12 @@ def create_session(base, browser):
     return body["value"]["sessionId"]
 
 
-def execute(base, session, script):
+def execute(base, session, script, arguments=None):
     return request(
         base,
         "POST",
         "/session/{0}/execute/sync".format(session),
-        {"script": script, "args": []},
+        {"script": script, "args": arguments or []},
     )["value"]
 
 
@@ -87,6 +87,14 @@ def find_element(base, session, selector):
         {"using": "css selector", "value": selector},
     )["value"]
     return value.get("element-6066-11e4-a52e-4f735466cecf") or value["ELEMENT"]
+
+
+def select_client(base, client):
+    session, _player, frame = client
+    if frame is not None:
+        request(base, "POST", "/session/{0}/frame".format(session), {"id": None})
+        request(base, "POST", "/session/{0}/frame".format(session), {"id": frame})
+    return session
 
 
 def send_turn_action(base, session, canvas, key):
@@ -110,6 +118,12 @@ def send_turn_action(base, session, canvas, key):
         },
     )
     request(base, "DELETE", "/session/{0}/actions".format(session))
+
+
+def send_client_turn(base, client, key):
+    session = select_client(base, client)
+    canvas = find_element(base, session, "#canvas")
+    send_turn_action(base, session, canvas, key)
 
 
 def capture_canvas(base, session):
@@ -249,7 +263,8 @@ def inspect_png(png):
     return result
 
 
-def browser_state(base, session):
+def browser_state(base, client):
+    session = select_client(base, client)
     return execute(
         base,
         session,
@@ -299,12 +314,12 @@ def wait_for(predicate, timeout, description):
     raise RuntimeError("timed out waiting for {0}; last={1!r}".format(description, last))
 
 
-def wait_for_state(base, session, timeout, description, accept):
+def wait_for_state(base, client, timeout, description, accept):
     deadline = time.monotonic() + timeout
     last = None
     while time.monotonic() < deadline:
         try:
-            last = browser_state(base, session)
+            last = browser_state(base, client)
             if accept(last):
                 return last
         except (RuntimeError, urllib.error.URLError) as error:
@@ -336,26 +351,59 @@ def main():
     evidence = []
 
     try:
+        client_urls = []
         for number in (1, 2):
             player = (args.browser + str(number))[:16]
             ticket = RELAY.mint_ticket(secret, player, args.browser + "-1v1")
             query = urllib.parse.urlencode(
                 {"relay": args.relay_url, "ticket": ticket, "player": player}
             )
+            client_urls.append((player, args.client_url + "?" + query))
+
+        if args.browser == "safari":
             session = create_session(args.webdriver_url, args.browser)
-            sessions.append((session, player))
             request(
                 args.webdriver_url,
                 "POST",
                 "/session/{0}/url".format(session),
-                {"url": args.client_url + "?" + query},
+                {"url": urllib.parse.urljoin(args.client_url, ".")},
                 timeout=10,
             )
-
-        for number, (session, player) in enumerate(sessions):
-            state = wait_for_state(
+            frame_count = execute(
                 args.webdriver_url,
                 session,
+                """
+document.body.replaceChildren();
+document.body.style.cssText = 'display:flex;margin:0;background:#05070b';
+for (var index = 0; index < arguments.length; ++index) {
+  var frame = document.createElement('iframe');
+  frame.src = arguments[index];
+  frame.style.cssText = 'border:0;width:50vw;height:100vh';
+  document.body.appendChild(frame);
+}
+return document.querySelectorAll('iframe').length;
+""",
+                [url for _player, url in client_urls],
+            )
+            if frame_count != 2:
+                raise RuntimeError("Safari duel host did not create two client frames")
+            sessions = [(session, player, number) for number, (player, _url) in enumerate(client_urls)]
+        else:
+            for player, url in client_urls:
+                session = create_session(args.webdriver_url, args.browser)
+                sessions.append((session, player, None))
+                request(
+                    args.webdriver_url,
+                    "POST",
+                    "/session/{0}/url".format(session),
+                    {"url": url},
+                    timeout=10,
+                )
+
+        for number, client in enumerate(sessions):
+            session, player, _frame = client
+            state = wait_for_state(
+                args.webdriver_url, client,
                 45,
                 player + " Wasm canvas and authenticated datagram socket",
                 lambda value: value.get("transport") and
@@ -363,17 +411,17 @@ def main():
                 value.get("canvasWidth", 0) > 0 and
                 not value.get("ticketVisible"),
             )
-            canvas = find_element(args.webdriver_url, session, "#canvas")
+            session = select_client(args.webdriver_url, client)
+            find_element(args.webdriver_url, session, "#canvas")
             key_name = "KeyA" if number == 0 else "KeyD"
             evidence.append({
                 "player": player,
                 "action": key_name + "," + ("KeyD" if number == 0 else "KeyA"),
                 "actionCount": 2,
-                "canvasElement": canvas,
                 "initialState": state,
             })
 
-        players = [player for _, player in sessions]
+        players = [player for _session, player, _frame in sessions]
 
         def server_result():
             if not server_log.exists():
@@ -396,7 +444,7 @@ def main():
         wait_for(players_ready, 45, "both authoritative team entries")
 
         def both_players_live():
-            states = [browser_state(args.webdriver_url, session) for session, _ in sessions]
+            states = [browser_state(args.webdriver_url, client) for client in sessions]
             return states if all(
                 value.get("stage") == "game-live" and
                 value.get("input") and
@@ -419,44 +467,47 @@ def main():
         # are alive. Waiting on one client's later frame before inspecting the
         # other can leave the second camera in a valid but sparse inter-round
         # view, even though its gameplay and renderer are healthy.
-        for index, (session, player) in enumerate(sessions):
-            capture = capture_canvas(args.webdriver_url, session)
+        for index, client in enumerate(sessions):
+            _session, player, _frame = client
+            capture = wait_for(
+                lambda: capture_canvas(
+                    args.webdriver_url, select_client(args.webdriver_url, client)
+                ),
+                15,
+                player + " nonblank upstream frame at the render boundary",
+            )
             (evidence_dir / (player + ".png")).write_bytes(capture["png"])
             evidence[index]["liveRender"] = capture["render"]
 
         # Act immediately while both upstream-controlled cycle objects are
         # alive. A nonnegative game timer also covers the dead/inter-round phase.
-        send_turn_action(
+        send_client_turn(
             args.webdriver_url,
-            sessions[1][0],
-            evidence[1]["canvasElement"],
+            sessions[1],
             "d",
         )
         time.sleep(0.35)
-        send_turn_action(
+        send_client_turn(
             args.webdriver_url,
-            sessions[1][0],
-            evidence[1]["canvasElement"],
+            sessions[1],
             "a",
         )
-        send_turn_action(
+        send_client_turn(
             args.webdriver_url,
-            sessions[0][0],
-            evidence[0]["canvasElement"],
+            sessions[0],
             "a",
         )
         time.sleep(1.5)
-        send_turn_action(
+        send_client_turn(
             args.webdriver_url,
-            sessions[0][0],
-            evidence[0]["canvasElement"],
+            sessions[0],
             "d",
         )
 
-        for session, player in sessions:
+        for client in sessions:
+            _session, player, _frame = client
             wait_for_state(
-                args.webdriver_url,
-                session,
+                args.webdriver_url, client,
                 15,
                 player + " received W3C controls in the browser",
                 lambda value: value.get("input") and
@@ -482,10 +533,10 @@ def main():
 
         result = wait_for(authoritative_result, args.timeout, "authoritative live-client 1v1 winner")
         (evidence_dir / (args.browser + "-result.log")).write_text(result, encoding="utf-8")
-        for index, (session, player) in enumerate(sessions):
+        for index, client in enumerate(sessions):
+            _session, player, _frame = client
             final_state = wait_for_state(
-                args.webdriver_url,
-                session,
+                args.webdriver_url, client,
                 15,
                 player + " bidirectional datagram traffic",
                 lambda value: value.get("transport") and
@@ -495,7 +546,6 @@ def main():
                 value["transport"].get("receivedDatagrams", 0) > 0,
             )
             evidence[index]["finalState"] = final_state
-            del evidence[index]["canvasElement"]
         (evidence_dir / (args.browser + "-states.json")).write_text(
             json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
@@ -506,9 +556,10 @@ def main():
         )
     except Exception:
         diagnostics = []
-        for index, (session, player) in enumerate(sessions):
+        for index, client in enumerate(sessions):
+            session, player, _frame = client
             try:
-                diagnostic = {"player": player, "state": browser_state(args.webdriver_url, session)}
+                diagnostic = {"player": player, "state": browser_state(args.webdriver_url, client)}
                 if index < len(evidence):
                     diagnostic["action"] = evidence[index].get("action")
                     diagnostic["actionCount"] = evidence[index].get("actionCount")
@@ -525,7 +576,11 @@ def main():
         )
         raise
     finally:
-        for session, _player in sessions:
+        closed_sessions = set()
+        for session, _player, _frame in sessions:
+            if session in closed_sessions:
+                continue
+            closed_sessions.add(session)
             try:
                 request(args.webdriver_url, "DELETE", "/session/{0}".format(session), timeout=10)
             except Exception:
