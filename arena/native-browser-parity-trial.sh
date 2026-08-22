@@ -24,7 +24,24 @@ python3 "$arena_dir/parity.py" --verify-input-manifest "$ARENA_PARITY_INPUT_MANI
 current_index=
 
 cleanup() {
-    test -n "$current_index" || return 0
+    status=$?
+    test -n "$current_index" || return "$status"
+    if test "$status" -ne 0; then
+        echo "parity trial $current_index failed; bounded container diagnostics follow" >&2
+        for name in \
+            "arena-parity-native-role1-$current_index" \
+            "arena-parity-native-role2-$current_index" \
+            "arena-parity-native-server-$current_index" \
+            "arena-parity-browser-server-$current_index" \
+            "arena-parity-static-$current_index" \
+            "arena-parity-relay-$current_index" \
+            "arena-parity-webdriver-$current_index"; do
+            if docker container inspect "$name" >/dev/null 2>&1; then
+                echo "container log: $name" >&2
+                docker logs --tail 200 "$name" >&2 || true
+            fi
+        done
+    fi
     docker rm -f \
         "arena-parity-native-role1-$current_index" \
         "arena-parity-native-role2-$current_index" \
@@ -33,6 +50,7 @@ cleanup() {
         "arena-parity-static-$current_index" \
         "arena-parity-relay-$current_index" \
         "arena-parity-webdriver-$current_index" >/dev/null 2>&1 || true
+    return "$status"
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -42,6 +60,8 @@ wait_log() {
         test -f "$log" && grep -q "$pattern" "$log" && return 0
         sleep 0.25
     done
+    echo "timed out waiting for $pattern in $log" >&2
+    test ! -f "$log" || tail -n 100 "$log" >&2
     return 1
 }
 
