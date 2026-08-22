@@ -5960,7 +5960,7 @@ static bool se_ArenaRosterName( int owner, tString & remoteName )
 
     tString rosterPath;
     rosterPath << rosterDir << "/" << sn_GetPort( owner );
-    std::ifstream roster( rosterPath.c_str() );
+    std::ifstream roster( static_cast< char const * >( rosterPath ) );
     std::string expected;
     if ( !std::getline( roster, expected ) || expected.empty() || expected.size() > 16 )
     {
