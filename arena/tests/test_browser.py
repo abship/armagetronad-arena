@@ -429,6 +429,7 @@ def main():
     parser.add_argument("--server-log", required=True)
     parser.add_argument("--evidence-dir", required=True)
     parser.add_argument("--timeout", type=int, default=150)
+    parser.add_argument("--parity-role-schedule", action="store_true")
     args = parser.parse_args()
 
     secret_value = os.environ.get("ARENA_RELAY_SECRET", "")
@@ -444,8 +445,8 @@ def main():
 
     try:
         def make_client_url(number):
-            player = (args.browser + str(number))[:16]
-            ticket = RELAY.mint_ticket(secret, player, args.browser + "-1v1")
+            player = ("role" + str(number)) if args.parity_role_schedule else (args.browser + str(number))[:16]
+            ticket = RELAY.mint_ticket(secret, player, args.browser + ("-parity" if args.parity_role_schedule else "-1v1"))
             query = urllib.parse.urlencode(
                 {
                     "relay": args.relay_url,
@@ -552,8 +553,10 @@ return document.querySelectorAll('iframe').length;
             key_name = "KeyA" if number == 0 else "KeyD"
             evidence.append({
                 "player": player,
-                "action": key_name + "," + ("KeyD" if number == 0 else "KeyA"),
-                "actionCount": 2,
+                "action": ("KeyA,KeyA" if args.parity_role_schedule and number == 0 else
+                           "" if args.parity_role_schedule else
+                           key_name + "," + ("KeyD" if number == 0 else "KeyA")),
+                "actionCount": 0 if args.parity_role_schedule and number == 1 else 2,
                 "initialState": state,
             })
 
@@ -617,41 +620,35 @@ return document.querySelectorAll('iframe').length;
         for client in sessions:
             arm_frame_metrics(args.webdriver_url, client)
 
-        # Act immediately while both upstream-controlled cycle objects are
-        # alive. A nonnegative game timer also covers the dead/inter-round phase.
-        send_client_turn(
-            args.webdriver_url,
-            sessions[1],
-            "d",
-        )
-        time.sleep(0.35)
-        send_client_turn(
-            args.webdriver_url,
-            sessions[1],
-            "a",
-        )
-        send_client_turn(
-            args.webdriver_url,
-            sessions[0],
-            "a",
-        )
-        time.sleep(1.5)
-        send_client_turn(
-            args.webdriver_url,
-            sessions[0],
-            "d",
-        )
+        # The parity schedule deliberately drives role1 into its wall twice;
+        # role2 receives no input, making the authoritative winner role2.
+        if args.parity_role_schedule:
+            send_client_turn(args.webdriver_url, sessions[0], "a")
+            send_client_turn(args.webdriver_url, sessions[0], "a")
+        else:
+            send_client_turn(args.webdriver_url, sessions[1], "d")
+            time.sleep(0.35)
+            send_client_turn(args.webdriver_url, sessions[1], "a")
+            send_client_turn(args.webdriver_url, sessions[0], "a")
+            time.sleep(1.5)
+            send_client_turn(args.webdriver_url, sessions[0], "d")
 
-        for client in sessions:
+        for index, client in enumerate(sessions):
             _session, player, _frame = client
             wait_for_state(
                 args.webdriver_url, client,
                 15,
                 player + " received W3C controls in the browser",
-                lambda value: value.get("input") and
-                value["input"].get("keyDown", 0) >= 2 and
-                value["input"].get("keyUp", 0) >= 2 and
-                value["input"].get("acceptedActions", 0) >= 1,
+                (lambda value: value.get("input") and
+                 value["input"].get("keyDown", 0) >= 2 and
+                 value["input"].get("keyUp", 0) >= 2 and
+                 value["input"].get("acceptedActions", 0) >=
+                (2 if args.parity_role_schedule else 1))
+                if not args.parity_role_schedule or index == 0 else
+                (lambda value: value.get("input") and
+                 value["input"].get("keyDown", 0) == 0 and
+                 value["input"].get("keyUp", 0) == 0 and
+                 value["input"].get("acceptedActions", 0) == 0),
             )
 
         def authoritative_result():
@@ -664,7 +661,9 @@ return document.querySelectorAll('iframe').length;
                 for player in players
             )
             finished = any(
-                "MATCH_WINNER" in line and any(player in line for player in players)
+                "MATCH_WINNER" in line and
+                ((args.parity_role_schedule and "role2" in line) or
+                 (not args.parity_role_schedule and any(player in line for player in players)))
                 for line in lines
             )
             return text if entered and finished else None

@@ -136,6 +136,19 @@ AC_ARG_ENABLE(glout,
        *) AC_MSG_ERROR(bad value ${enableval} for --enable-glout) ;;
      esac],)
 
+AC_ARG_ENABLE(arena-native-parity,
+     AC_HELP_STRING([--enable-arena-native-parity],
+        [build the Arena native-parity client test seam (default=disabled)]),
+     [case "${enableval}" in
+       yes) arena_native_parity=true ;;
+       no)  arena_native_parity=false ;;
+       *) AC_MSG_ERROR(bad value ${enableval} for --enable-arena-native-parity) ;;
+     esac],[arena_native_parity=false])
+
+if test x$arena_native_parity = xtrue; then
+    AC_DEFINE(ARENA_NATIVE_PARITY, 1, [Define for the Arena native-parity client test seam])
+fi
+
 use_curl=auto
 AC_ARG_ENABLE(curl,
      AC_HELP_STRING([--enable-curl],

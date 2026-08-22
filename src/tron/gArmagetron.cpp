@@ -859,7 +859,7 @@ int main(int argc,char **argv){
 
                     //std::cout << "init sound\n";
 
-#ifndef __EMSCRIPTEN__
+#if !defined(__EMSCRIPTEN__) && !defined(ARENA_NATIVE_PARITY)
                     welcome();
 #endif
 
@@ -880,6 +880,20 @@ int main(int argc,char **argv){
                     if ( !sg_ArenaRelayConfigured() )
                         tERR_ERROR( "Arena browser client requires a relay URL and one-time ticket." );
                     nServerInfoRedirect arenaServer( tString( "127.0.0.1" ), sn_defaultPort );
+                    ConnectToServer( &arenaServer );
+#elif defined(ARENA_NATIVE_PARITY)
+                    char const * arenaParityHost = getenv( "ARENA_PARITY_HOST" );
+                    char const * arenaParityPort = getenv( "ARENA_PARITY_PORT" );
+                    int port = sn_defaultPort;
+                    if ( arenaParityPort && *arenaParityPort )
+                    {
+                        char * end = 0;
+                        long parsed = strtol( arenaParityPort, &end, 10 );
+                        if ( !*arenaParityPort || *end || parsed < 1 || parsed > 65535 )
+                            tERR_ERROR( "ARENA_PARITY_PORT must be an integer in 1..65535." );
+                        port = static_cast< int >( parsed );
+                    }
+                    nServerInfoRedirect arenaServer( tString( arenaParityHost && *arenaParityHost ? arenaParityHost : "127.0.0.1" ), port );
                     ConnectToServer( &arenaServer );
 #else
                     MainMenu();

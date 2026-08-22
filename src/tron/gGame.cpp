@@ -75,6 +75,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "nAuthentication.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string>
 #include <fstream>
@@ -96,6 +97,22 @@ EM_JS( void, sg_ArenaSetLocalObjectStatus,
     status['localObjectPresent'] = !!object;
     status['localObjectAlive'] = !!alive;
 } );
+#elif defined(ARENA_NATIVE_PARITY)
+static void sg_ArenaSetLocalObjectStatus( int, int, int alive )
+{
+    static bool readyWritten = false;
+    if ( readyWritten || !alive )
+        return;
+    char const * path = getenv( "ARENA_PARITY_INPUT_EVIDENCE" );
+    if ( !path || !path[0] )
+        return;
+    FILE * output = fopen( path, "a" );
+    if ( !output )
+        return;
+    fprintf( output, "READY\n" );
+    fclose( output );
+    readyWritten = true;
+}
 #endif
 
 #ifdef KRAWALL_SERVER
@@ -4261,7 +4278,7 @@ bool gGame::GameLoop(bool input){
         }
     }
 
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__) || defined(ARENA_NATIVE_PARITY)
     // Let the browser harness deliver controls only after the authoritative
     // upstream game timer leaves the countdown. This is observability only;
     // game state, timing, and simulation remain owned by the C++ client.
@@ -4271,9 +4288,14 @@ bool gGame::GameLoop(bool input){
     if ( arenaLocal )
         arenaNetPlayer = arenaLocal->netPlayer;
     eNetGameObject * arenaObject = arenaNetPlayer ? arenaNetPlayer->Object() : NULL;
+#ifdef __EMSCRIPTEN__
     sg_ArenaSetClientStage( live ? "game-live" : "game-transition" );
     sg_ArenaSetLocalObjectStatus( arenaNetPlayer != NULL, arenaObject != NULL,
                                   arenaObject && arenaObject->Alive() );
+#else
+    sg_ArenaSetLocalObjectStatus( arenaNetPlayer != NULL, arenaObject != NULL,
+                                  live && arenaObject && arenaObject->Alive() );
+#endif
 #endif
     //con << sg_netPlayerWalls.Len() << '\n';
 

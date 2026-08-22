@@ -34,6 +34,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "uMenu.h"
 #include "tSysTime.h"
 
+#ifdef ARENA_NATIVE_PARITY
+#include <cstdio>
+#include <cstdlib>
+#endif
+
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
 
@@ -57,6 +62,32 @@ EM_JS( void, su_ArenaRecordPlayerAction,
     status['lastActionAccepted'] = !!accepted;
     if (accepted) status['acceptedActions'] += 1;
 } );
+#elif defined(ARENA_NATIVE_PARITY)
+static void su_ArenaRecordSDLKey( int down, int sym, int bound )
+{
+    char const * path = std::getenv( "ARENA_PARITY_INPUT_EVIDENCE" );
+    if ( !path || !path[0] )
+        return;
+    FILE * output = std::fopen( path, "a" );
+    if ( !output )
+        return;
+    std::fprintf( output, "KEY %d %d 0 %d\n", down, sym, bound );
+    std::fclose( output );
+}
+
+static void su_ArenaRecordPlayerAction( char const * action, int player,
+                                        double value, int accepted )
+{
+    char const * path = std::getenv( "ARENA_PARITY_INPUT_EVIDENCE" );
+    if ( !path || !path[0] )
+        return;
+    FILE * output = std::fopen( path, "a" );
+    if ( !output )
+        return;
+    std::fprintf( output, "ACTION %.64s %d %.17g %d\n",
+                  action ? action : "", player, value, accepted );
+    std::fclose( output );
+}
 #endif
 
 bool su_mouseGrab = false;
@@ -689,7 +720,7 @@ bool su_HandleEvent(SDL_Event &e, bool delayed ){
     default:
         break;
     }
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__) || defined(ARENA_NATIVE_PARITY)
     if ( e.type == SDL_KEYDOWN || e.type == SDL_KEYUP )
     {
         su_ArenaRecordSDLKey( e.type == SDL_KEYDOWN, sym,
@@ -806,7 +837,7 @@ bool uBindPlayer::DoActivate(REAL x){
     else
         ret = uPlayerPrototype::PlayerConfig(ePlayer-1)->Act(act,x);
 
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__) || defined(ARENA_NATIVE_PARITY)
     su_ArenaRecordPlayerAction( act ? (const char *)act->internalName : "",
                                 ePlayer, x, ret );
 #endif
