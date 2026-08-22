@@ -121,4 +121,4 @@ COPY --from=build /src/resource/proto/Z-Man/sumo_4x4.aamap.xml /arena/data/resou
 COPY --from=build /src/sound/ /arena/data/sound/
 COPY --from=build /src/textures/ /arena/data/textures/
 ENTRYPOINT ["/usr/local/bin/armagetronad"]
-CMD ["--window", "--datadir", "/arena/data", "--configdir", "/arena/data/config", "--userconfigdir", "/arena/var", "--vardir", "/arena/var", "--resourcedir", "/arena/data/resource", "--autoresourcedir", "/arena/var/resource-cache"]
+CMD ["-w", "--datadir", "/arena/data", "--configdir", "/arena/data/config", "--userconfigdir", "/arena/var", "--vardir", "/arena/var", "--resourcedir", "/arena/data/resource", "--autoresourcedir", "/arena/var/resource-cache"]

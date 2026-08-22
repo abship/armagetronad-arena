@@ -160,18 +160,19 @@ run_native() {
     docker run -d --name "arena-parity-native-server-$index" --network host \
         -v "$dir/server:/arena/var" arena-native-runtime:parity >/dev/null
     for role in 1 2; do
+        display=:$((98 + role))
         docker run -d --name "arena-parity-native-role$role-$index" --network host --entrypoint /bin/sh \
+            -e DISPLAY="$display" \
             -e ARENA_PARITY_HOST=127.0.0.1 -e ARENA_PARITY_PORT=4534 \
             -e ARENA_PARITY_INPUT_EVIDENCE=/arena/var/input-evidence.log \
             -v "$dir/role$role:/arena/var" "$ARENA_NATIVE_PARITY_IMAGE" \
-            -ec 'export DISPLAY=:99; Xvfb :99 -screen 0 800x600x24 & xvfb=$!; sleep 1; kill -0 "$xvfb"; exec /usr/local/bin/armagetronad --window --datadir /arena/data --configdir /arena/data/config --userconfigdir /arena/var --vardir /arena/var --resourcedir /arena/data/resource --autoresourcedir /arena/var/resource-cache' >/dev/null
+            -ec 'Xvfb "$DISPLAY" -screen 0 800x600x24 & xvfb=$!; sleep 1; kill -0 "$xvfb"; exec /usr/local/bin/armagetronad -w --datadir /arena/data --configdir /arena/data/config --userconfigdir /arena/var --vardir /arena/var --resourcedir /arena/data/resource --autoresourcedir /arena/var/resource-cache' >/dev/null
     done
     wait_log "$dir/server/ladderlog.txt" '^PLAYER_ENTERED role1'
     wait_log "$dir/server/ladderlog.txt" '^PLAYER_ENTERED role2'
     wait_log "$dir/role1/input-evidence.log" '^READY$'
     wait_log "$dir/role2/input-evidence.log" '^READY$'
     docker exec "arena-parity-native-role1-$index" sh -ec '
-        export DISPLAY=:99
         window=$(xdotool search --onlyvisible --name Armagetron | head -n 1)
         xdotool windowfocus "$window"
         xdotool keydown a; sleep 0.12; xdotool keyup a
