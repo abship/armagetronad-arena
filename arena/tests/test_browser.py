@@ -281,6 +281,20 @@ return (function() {
   var canvas = document.getElementById('canvas');
   var gl = canvas && canvas.getContext('webgl');
   var glAttributes = gl && gl.getContextAttributes();
+  var glStatus = null;
+  try {
+    glStatus = {
+      available: !!gl,
+      attributes: glAttributes,
+      drawingBufferHeight: gl ? gl.drawingBufferHeight : 0,
+      drawingBufferWidth: gl ? gl.drawingBufferWidth : 0,
+      lost: gl ? gl.isContextLost() : null,
+      maxTextureImageUnits: gl ? gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS) : null,
+      version: gl ? gl.getParameter(gl.VERSION) : null
+    };
+  } catch (error) {
+    glStatus = {error: String(error).slice(0, 256)};
+  }
   var transport = (typeof Module !== 'undefined') && Module['arenaSocketTransport'];
   var transportStatus = null;
   var statusError = null;
@@ -294,6 +308,7 @@ return (function() {
     canvasHeight: canvas ? canvas.height : 0,
     documentReadyState: document.readyState,
     errors: (window.__arenaErrors || []).slice(-16),
+    gl: glStatus,
     input: (typeof Module !== 'undefined') ? (Module['arenaInputStatus'] || null) : null,
     modulePresent: typeof Module !== 'undefined',
     preserveDrawingBuffer: !!(glAttributes && glAttributes.preserveDrawingBuffer),

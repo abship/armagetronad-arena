@@ -1,6 +1,9 @@
 /* Copyright (C) 2026 Arena contributors. GPLv2+; see COPYING.txt. */
 Module['canvas'] = document.getElementById('canvas');
 Module['thisProgram'] = '/arena-web/bin/armagetronad_main';
+// Arena's upstream renderer uses only texture unit 0. Bound legacy GL
+// emulation explicitly because Safari can report zero units during startup.
+Module['GL_MAX_TEXTURE_IMAGE_UNITS'] = 1;
 var arenaPreviousPrintErr = Module['printErr'];
 Module['printErr'] = function(value) {
   if (window.__arenaRecordError) window.__arenaRecordError(value);

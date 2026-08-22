@@ -39,6 +39,7 @@ vm.runInNewContext(
 assert.strictEqual('wss://relay.invalid/socket', context.Module.arenaRelayURL);
 assert.strictEqual('short-lived-ticket', context.Module.arenaRelayTicket);
 assert.strictEqual('/arena-web/bin/armagetronad_main', context.Module.thisProgram);
+assert.strictEqual(1, context.Module.GL_MAX_TEXTURE_IMAGE_UNITS);
 assert.ok(!replaced.includes('ticket='));
 assert.ok(replaced.includes('relay='));
 context.Module.preRun[0]();
