@@ -43,6 +43,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <iostream>
 #include <deque>
 #include <algorithm>
+#include <cstdlib>
 #include "rRender.h"
 #include "rSysdep.h"
 #include "nAuthentication.h"
@@ -5948,6 +5949,40 @@ static void se_OptionalNameFilters( tString & remoteName, int owner )
     }
 }
 
+// Arena's relay writes one authenticated roster record per active UDP source
+// port. This hook is dormant unless the dedicated server is launched with
+// ARENA_ROSTER_DIR; other native deployments keep upstream name handling.
+static bool se_ArenaRosterName( int owner, tString & remoteName )
+{
+    char const * rosterDir = std::getenv( "ARENA_ROSTER_DIR" );
+    if ( sn_GetNetState() != nSERVER || owner <= 0 || !rosterDir || !*rosterDir )
+        return true;
+
+    tString rosterPath;
+    rosterPath << rosterDir << "/" << sn_GetPort( owner );
+    std::ifstream roster( rosterPath.c_str() );
+    std::string expected;
+    if ( !std::getline( roster, expected ) || expected.empty() || expected.size() > 16 )
+    {
+        sn_DisconnectUser( owner, tOutput( "Arena relay roster identity required." ) );
+        return false;
+    }
+    for ( std::string::const_iterator character = expected.begin(); character != expected.end(); ++character )
+    {
+        if ( !( ( *character >= 'A' && *character <= 'Z' ) ||
+                ( *character >= 'a' && *character <= 'z' ) ||
+                ( *character >= '0' && *character <= '9' ) ||
+                *character == '_' || *character == '-' ) )
+        {
+            sn_DisconnectUser( owner, tOutput( "Invalid Arena relay roster identity." ) );
+            return false;
+        }
+    }
+
+    remoteName = expected.c_str();
+    return true;
+}
+
 void ePlayerNetID::ReadSync(nMessage &m){
     // check whether this is the first sync
     bool firstSync = ( this->ID() == 0 );
@@ -5976,6 +6011,9 @@ void ePlayerNetID::ReadSync(nMessage &m){
     {
         // read and shorten name, but don't update it yet
         m >> remoteName;
+
+        if ( !se_ArenaRosterName( Owner(), remoteName ) )
+            throw nKillHim();
 
         // filter
         se_OptionalNameFilters( remoteName, Owner() );

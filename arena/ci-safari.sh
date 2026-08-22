@@ -28,7 +28,8 @@ test ! -L "$repo_dir/build" && test ! -L "$runtime_dir" || {
     exit 1
 }
 rm -rf "$runtime_dir"
-mkdir -p "$runtime_dir/server" "$runtime_dir/evidence" "$runtime_dir/python"
+mkdir -p "$runtime_dir/server" "$runtime_dir/evidence" "$runtime_dir/python" \
+    "$runtime_dir/roster"
 
 wheel="$runtime_dir/python/websockets-15.0.1-py3-none-any.whl"
 curl --fail --location --silent --show-error "$WEBSOCKETS_WHEEL_URL" -o "$wheel"
@@ -37,6 +38,7 @@ python3 -m pip install --disable-pip-version-check --no-deps --no-index \
     --target "$runtime_dir/python" "$wheel"
 export PYTHONPATH="$runtime_dir/python"
 export ARENA_RELAY_SECRET=ci-only-ephemeral-relay-secret-material
+export ARENA_ROSTER_DIR="$runtime_dir/roster"
 export ARENA_SAFARI_WEBDRIVER_URL=http://127.0.0.1:4444
 
 native_pid=
@@ -76,6 +78,7 @@ static_pid=$!
 
 python3 "$arena_dir/relay.py" \
     --allow-origin http://127.0.0.1:8000 \
+    --roster-dir "$ARENA_ROSTER_DIR" \
     --evidence "$runtime_dir/evidence/relay.jsonl" \
     >"$runtime_dir/evidence/relay.log" 2>&1 &
 relay_pid=$!

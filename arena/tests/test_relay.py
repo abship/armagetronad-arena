@@ -8,6 +8,7 @@ import importlib.util
 import os
 import socket
 import struct
+import tempfile
 import threading
 import time
 import unittest
@@ -86,10 +87,11 @@ class RelayTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.secret = b"test-only-secret-material-32-bytes-long"
+        cls.roster = tempfile.TemporaryDirectory()
         cls.udp = UDPRecorder()
         cls.server = RELAY.RelayServer(
             ("127.0.0.1", 0), cls.udp.address, cls.secret, [ORIGIN], 64, 2,
-            max_nonces=64
+            max_nonces=64, roster_dir=cls.roster.name
         )
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
@@ -100,6 +102,7 @@ class RelayTest(unittest.TestCase):
         cls.server.server_close()
         cls.thread.join(timeout=1)
         cls.udp.close()
+        cls.roster.cleanup()
 
     def ticket(self, nonce, session=None):
         return RELAY.mint_ticket(
@@ -132,6 +135,18 @@ class RelayTest(unittest.TestCase):
                     return
             time.sleep(0.01)
         self.fail("relay did not release active session/player slot")
+
+    def wait_roster_files(self, count):
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            files = [
+                name for name in os.listdir(self.roster.name)
+                if name.isdigit()
+            ]
+            if len(files) == count:
+                return files
+            time.sleep(0.01)
+        self.fail("relay roster file count did not become {0}".format(count))
 
     def test_binary_messages_are_complete_unchanged_datagrams(self):
         connection, response = self.connect(self.ticket("preserve"))
@@ -191,6 +206,38 @@ class RelayTest(unittest.TestCase):
         self.assertEqual(1008, struct.unpack("!H", payload[:2])[0])
         connection.close()
 
+    def test_ping_flood_is_rejected_without_udp_traffic(self):
+        connection, response = self.connect(self.ticket("ping-flood"))
+        self.assertIn(b"101 Switching Protocols", response)
+        start = len(self.udp.messages)
+        for payload in (b"one", b"two"):
+            send_frame(connection, payload, opcode=9)
+            self.assertEqual((10, payload), receive_frame(connection))
+        send_frame(connection, b"three", opcode=9)
+        opcode, payload = receive_frame(connection)
+        self.assertEqual(8, opcode)
+        self.assertEqual(1008, struct.unpack("!H", payload[:2])[0])
+        self.assertEqual(start, len(self.udp.messages))
+        connection.close()
+
+    def test_oversized_control_frame_is_rejected(self):
+        connection, response = self.connect(self.ticket("large-ping"))
+        self.assertIn(b"101 Switching Protocols", response)
+        send_frame(connection, b"x" * 126, opcode=9)
+        opcode, payload = receive_frame(connection)
+        self.assertEqual(8, opcode)
+        self.assertEqual(1002, struct.unpack("!H", payload[:2])[0])
+        connection.close()
+
+    def test_roster_file_tracks_authenticated_identity(self):
+        connection, response = self.connect(self.ticket("roster", "roster-session"))
+        self.assertIn(b"101 Switching Protocols", response)
+        files = self.wait_roster_files(1)
+        with open(os.path.join(self.roster.name, files[0]), encoding="ascii") as source:
+            self.assertEqual(["player", "roster-session"], source.read().splitlines())
+        connection.close()
+        self.wait_roster_files(0)
+
     def test_distinct_ticket_duplicate_live_slot_is_rejected(self):
         session = "duplicate-live"
         first, response = self.connect(self.ticket("duplicate-a", session))
@@ -230,6 +277,11 @@ class RelayTest(unittest.TestCase):
                 self.assertLessEqual(len(self.server._nonces), self.server.max_nonces)
         finally:
             self.server.release(identity)
+
+    def test_ticket_player_must_match_native_roster_syntax(self):
+        ticket = RELAY.mint_ticket(self.secret, "not a player", "session")
+        with self.assertRaises(RELAY.TokenError):
+            RELAY.verify_ticket(self.secret, ticket)
 
 
 if __name__ == "__main__":

@@ -377,7 +377,11 @@ def main():
             player = (args.browser + str(number))[:16]
             ticket = RELAY.mint_ticket(secret, player, args.browser + "-1v1")
             query = urllib.parse.urlencode(
-                {"relay": args.relay_url, "ticket": ticket, "player": player}
+                {
+                    "relay": args.relay_url,
+                    "ticket": ticket,
+                    "player": "forged" + str(number),
+                }
             )
             client_urls.append((player, args.client_url + "?" + query))
 

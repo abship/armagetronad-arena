@@ -13,14 +13,23 @@ exposing the UDP theoretical 65,507-byte maximum.
 Both sides reject larger datagrams. The browser caps queued output at 32
 messages and queued input at 128 messages, with a 32 KiB byte cap in either
 direction. It rejects stale controls after one second and closes on WebSocket
-`bufferedAmount` backlog. The relay rate-limits complete messages and never
-splits or joins them.
+`bufferedAmount` backlog. The relay rate-limits every inbound WebSocket frame,
+including PING controls, and handles controls iteratively so they cannot bypass
+the flood bound or grow the handler stack. It never splits or joins datagrams.
 
 Authentication uses a server-minted HMAC ticket with a maximum five-minute
 lifetime. The ticket carries the authoritative `(session, player)` identity,
 travels in a WebSocket subprotocol, is removed from browser history after
 startup, is never written to evidence, and can be used only once. The relay
 also permits only one live connection per `(session, player)` slot.
+
+For the Arena dedicated-server launch only, the relay atomically publishes the
+signed player identity under its active UDP source port. The isolated native
+roster hook reads that record and replaces the untrusted client-supplied name
+before upstream roster, ladder, and winner handling. Missing or invalid active
+records disconnect the native client. The relay removes each record when its
+socket closes, bounding the directory by live connections. Without
+`ARENA_ROSTER_DIR`, upstream native name handling is unchanged.
 
 The feasibility static server strips query strings from request logs. Browser
 failure diagnostics record only bounded, ticket-redacted state and screenshots;

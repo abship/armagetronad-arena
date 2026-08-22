@@ -16,6 +16,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import select
 import socket
@@ -32,6 +33,7 @@ PROTOCOL = "arena-datagram-v1"
 AUTH_PREFIX = "arena-auth-"
 MAX_TICKET_TTL = 300
 PROTOCOL_MAX_DATAGRAM = 2048
+PLAYER_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,16}$")
 
 
 def _b64encode(data):
@@ -89,6 +91,8 @@ def verify_ticket(secret, ticket, now=None):
         value = payload.get(key)
         if not isinstance(value, str) or not value or len(value) > maximum:
             raise TokenError(401, "invalid credential")
+    if not PLAYER_PATTERN.fullmatch(payload["player"]):
+        raise TokenError(401, "invalid credential")
     return payload
 
 
@@ -97,7 +101,7 @@ class RelayServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     daemon_threads = True
 
     def __init__(self, address, udp_target, secret, allowed_origins, max_datagram,
-                 max_rate, evidence_path=None, max_nonces=65536):
+                 max_rate, evidence_path=None, max_nonces=65536, roster_dir=None):
         self.udp_target = udp_target
         self.secret = secret
         self.allowed_origins = set(allowed_origins)
@@ -105,10 +109,38 @@ class RelayServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
         self.max_rate = max_rate
         self.max_nonces = max_nonces
         self.evidence_path = evidence_path
+        self.roster_dir = roster_dir
         self._nonces = {}
         self._active_slots = set()
         self._lock = threading.Lock()
         super().__init__(address, RelayHandler)
+
+    def register_roster(self, identity, port):
+        if not self.roster_dir:
+            return None
+        path = os.path.join(self.roster_dir, str(port))
+        temporary = path + "." + secrets.token_hex(8)
+        descriptor = os.open(
+            temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644
+        )
+        try:
+            with os.fdopen(descriptor, "w", encoding="ascii") as output:
+                output.write(identity["player"] + "\n" + identity["session"] + "\n")
+            os.replace(temporary, path)
+        except BaseException:
+            try:
+                os.unlink(temporary)
+            except FileNotFoundError:
+                pass
+            raise
+        return path
+
+    def unregister_roster(self, path):
+        if path:
+            try:
+                os.unlink(path)
+            except FileNotFoundError:
+                pass
 
     def authenticate(self, ticket):
         timestamp = int(time.time())
@@ -222,16 +254,18 @@ class RelayHandler(socketserver.BaseRequestHandler):
 
     def _relay(self, identity):
         udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        roster_path = None
         try:
             udp.connect(self.server.udp_target)
+            roster_path = self.server.register_roster(identity, udp.getsockname()[1])
             udp.setblocking(False)
             self.request.settimeout(5)
             recent = collections.deque()
             while True:
                 readable, _, _ = select.select((self.request, udp), (), (), 1)
                 if self.request in readable:
-                    datagram = self._read_binary_frame()
-                    if datagram is None:
+                    frame = self._read_frame()
+                    if frame is None:
                         return
                     timestamp = time.monotonic()
                     while recent and recent[0] <= timestamp - 1:
@@ -240,6 +274,10 @@ class RelayHandler(socketserver.BaseRequestHandler):
                         self._close(1008, "rate limit")
                         return
                     recent.append(timestamp)
+                    opcode, datagram = frame
+                    if opcode == 9:
+                        self._send_frame(10, datagram)
+                        continue
                     udp.send(datagram)
                     self.server.record("browser_to_native", identity, datagram)
                 if udp in readable:
@@ -250,6 +288,7 @@ class RelayHandler(socketserver.BaseRequestHandler):
                     self._send_frame(2, datagram)
                     self.server.record("native_to_browser", identity, datagram)
         finally:
+            self.server.unregister_roster(roster_path)
             udp.close()
 
     def _read_exact(self, length):
@@ -261,7 +300,7 @@ class RelayHandler(socketserver.BaseRequestHandler):
             data.extend(chunk)
         return bytes(data)
 
-    def _read_binary_frame(self):
+    def _read_frame(self):
         first, second = self._read_exact(2)
         final = first & 0x80
         opcode = first & 0x0F
@@ -274,6 +313,9 @@ class RelayHandler(socketserver.BaseRequestHandler):
             length = struct.unpack("!H", self._read_exact(2))[0]
         elif length == 127:
             length = struct.unpack("!Q", self._read_exact(8))[0]
+        if opcode >= 8 and length > 125:
+            self._close(1002, "invalid control frame")
+            return None
         if length > self.server.max_datagram:
             self._close(1009, "datagram too large")
             return None
@@ -283,13 +325,10 @@ class RelayHandler(socketserver.BaseRequestHandler):
             payload[index] ^= mask[index & 3]
         if opcode == 8:
             return None
-        if opcode == 9:
-            self._send_frame(10, payload)
-            return self._read_binary_frame()
-        if opcode != 2:
+        if opcode not in (2, 9):
             self._close(1003, "binary datagrams required")
             return None
-        return bytes(payload)
+        return opcode, bytes(payload)
 
     def _send_frame(self, opcode, payload):
         length = len(payload)
@@ -328,6 +367,7 @@ def parse_args(argv=None):
     parser.add_argument("--max-datagram", type=int, default=2048)
     parser.add_argument("--max-rate", type=int, default=256)
     parser.add_argument("--evidence")
+    parser.add_argument("--roster-dir")
     parser.add_argument("--tls-cert")
     parser.add_argument("--tls-key")
     parser.add_argument("--max-nonces", type=int, default=65536)
@@ -346,6 +386,8 @@ def main(argv=None):
     if not secret_value or len(secret_value) < 32:
         raise SystemExit(args.secret_env + " must contain at least 32 characters")
     secret = secret_value.encode("utf-8")
+    if args.roster_dir and not os.path.isdir(args.roster_dir):
+        raise SystemExit("--roster-dir must name an existing directory")
     if args.mint_ticket:
         if not args.player or not args.session:
             raise SystemExit("--player and --session are required with --mint-ticket")
@@ -361,6 +403,7 @@ def main(argv=None):
         args.max_rate,
         args.evidence,
         args.max_nonces,
+        args.roster_dir,
     )
     if args.tls_cert or args.tls_key:
         if not args.tls_cert or not args.tls_key:

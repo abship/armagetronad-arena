@@ -13,8 +13,8 @@ test "$(uname -m)" = x86_64 || {
 
 runtime_dir="$repo_dir/build/runtime"
 rm -rf "$runtime_dir"
-mkdir -p "$runtime_dir/server" "$runtime_dir/evidence"
-chmod 0777 "$runtime_dir/server" "$runtime_dir/evidence"
+mkdir -p "$runtime_dir/server" "$runtime_dir/evidence" "$runtime_dir/roster"
+chmod 0777 "$runtime_dir/server" "$runtime_dir/evidence" "$runtime_dir/roster"
 
 export ARENA_RUNTIME_TAG=arena-native-runtime:ci
 export ARENA_RELAY_SECRET=ci-only-ephemeral-relay-secret-material
@@ -34,7 +34,9 @@ docker run -d \
     --name arena-native \
     --platform linux/amd64 \
     --network host \
+    -e ARENA_ROSTER_DIR=/arena/roster \
     -v "$runtime_dir/server:/arena/var" \
+    -v "$runtime_dir/roster:/arena/roster:ro" \
     "$ARENA_RUNTIME_TAG" >/dev/null
 
 docker run -d \
@@ -54,10 +56,12 @@ docker run -d \
     -e ARENA_RELAY_SECRET \
     -v "$repo_dir:/src:ro" \
     -v "$runtime_dir/evidence:/evidence" \
+    -v "$runtime_dir/roster:/roster" \
     -w /src \
     "$EMSDK_IMAGE_LINUX_AMD64" \
     python3 arena/relay.py \
         --allow-origin http://127.0.0.1:8000 \
+        --roster-dir /roster \
         --evidence /evidence/relay.jsonl >/dev/null
 
 for attempt in $(seq 1 30); do
