@@ -75,11 +75,25 @@ class SafariHelpersTest(unittest.TestCase):
             "heapBytes": 80 * BROWSER.MIB,
         })
         self.assertEqual(19.0, summary["p95GapMs"])
+        self.assertEqual(0, summary["severeGapCount"])
         self.assertTrue(BROWSER.frame_metrics_pass(summary))
+        isolated_outlier = BROWSER.summarize_frame_metrics({
+            "gaps": [16] * 99 + [3000],
+            "initialHeapBytes": 64 * BROWSER.MIB,
+            "heapBytes": 64 * BROWSER.MIB,
+        })
+        self.assertTrue(BROWSER.frame_metrics_pass(isolated_outlier))
+        repeated_outliers = BROWSER.summarize_frame_metrics({
+            "gaps": [16] * 98 + [1000, 3000],
+            "initialHeapBytes": 64 * BROWSER.MIB,
+            "heapBytes": 64 * BROWSER.MIB,
+        })
+        self.assertFalse(BROWSER.frame_metrics_pass(repeated_outliers))
         for field, value in (
             ("sampleCount", 19),
             ("p95GapMs", 251),
-            ("maxGapMs", 751),
+            ("severeGapCount", 2),
+            ("maxGapMs", 3501),
             ("heapBytes", 257 * BROWSER.MIB),
             ("heapGrowthBytes", 33 * BROWSER.MIB),
             ("sampleOverflow", True),

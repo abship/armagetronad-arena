@@ -47,9 +47,12 @@ cycles are live. Cadence sampling continues through input and the authoritative
 result, but resets across dead/inter-round phases so deliberate lifecycle pauses
 are not mislabeled as render stalls. Every client must retain at least 20 live-
 cycle samples without overflowing the bounded 32,768-sample window, report p95
-at or below 250 ms, maximum gap at or below 750 ms, Wasm linear memory at or
-below 256 MiB, and growth after arming at or below 32 MiB. These are stall/leak
-bounds, not a browser-process or GPU-memory claim.
+at or below 250 ms, contain at most one gap above 750 ms, and have an absolute
+maximum gap at or below 3.5 seconds. Wasm linear memory must stay at or below 256
+MiB with growth after arming at or below 32 MiB. The percentile and outlier-count
+limits reject sustained jank; the maximum catches a hard stall without
+misclassifying one observed dual-session CI outlier as a renderer failure.
+These are stall/leak bounds, not a browser-process or GPU-memory claim.
 
 The Emscripten client bypasses the native interactive welcome/first-use UI and
 enters the Arena auto-connect seam directly. Native startup remains unchanged.

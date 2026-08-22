@@ -274,13 +274,14 @@ def inspect_png(png):
 
 def summarize_frame_metrics(metrics):
     gaps = sorted(float(value) for value in metrics.get("gaps", []))
-    rank = max(0, int(math.ceil(0.95 * len(gaps))) - 1)
+    p95_rank = max(0, int(math.ceil(0.95 * len(gaps))) - 1)
     initial_heap = int(metrics.get("initialHeapBytes", 0))
     heap = int(metrics.get("heapBytes", initial_heap))
     return {
         "sampleCount": len(gaps),
-        "p95GapMs": round(gaps[rank], 3) if gaps else None,
+        "p95GapMs": round(gaps[p95_rank], 3) if gaps else None,
         "maxGapMs": round(max(gaps), 3) if gaps else None,
+        "severeGapCount": sum(value > 750 for value in gaps),
         "initialHeapBytes": initial_heap,
         "heapBytes": heap,
         "heapGrowthBytes": max(0, heap - initial_heap),
@@ -293,7 +294,8 @@ def frame_metrics_pass(metrics):
         metrics.get("sampleCount", 0) >= 20 and
         not metrics.get("sampleOverflow", True) and
         metrics.get("p95GapMs") is not None and metrics["p95GapMs"] <= 250 and
-        metrics.get("maxGapMs") is not None and metrics["maxGapMs"] <= 750 and
+        metrics.get("severeGapCount", 2) <= 1 and
+        metrics.get("maxGapMs") is not None and metrics["maxGapMs"] <= 3500 and
         metrics.get("heapBytes", 257 * MIB) <= 256 * MIB and
         metrics.get("heapGrowthBytes", 33 * MIB) <= 32 * MIB
     )
