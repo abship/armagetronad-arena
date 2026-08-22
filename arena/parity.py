@@ -12,8 +12,9 @@ import subprocess
 
 SCHEMA = "arena-native-browser-parity-v1"
 INPUT_SCHEMA = "arena-native-browser-parity-inputs-v1"
-EXPECTED_EVENTS = ["PLAYER_ENTERED", "PLAYER_ENTERED", "MATCH_WINNER", "GAME_END"]
-INPUT_SCHEDULE = "role1:a(120ms),a(120ms);role2:none"
+EXPECTED_EVENTS = ["PLAYER_ENTERED", "PLAYER_ENTERED", "DEATH_SUICIDE",
+                   "MATCH_WINNER", "GAME_END"]
+INPUT_SCHEDULE = "role1:wait(200ms),a(120ms),a(120ms),a(120ms);role2:none"
 BUILD_PATHS = {
     "nativeClient": "build/native-parity/amd64/armagetronad",
     "nativeServer": "build/native/amd64/armagetronad-dedicated",
@@ -56,7 +57,8 @@ def file_sha256(path):
 
 def config_sha256(repo_dir):
     digest = hashlib.sha256()
-    for relative in ("arena/config/arena.cfg", "arena/config/native-parity.cfg"):
+    for relative in ("arena/config/arena.cfg", "arena/config/native-parity.cfg",
+                     "arena/config/parity-server.cfg"):
         digest.update((repo_dir / relative).read_bytes())
     return digest.hexdigest()
 
@@ -100,12 +102,42 @@ def native_input_counts(path):
 
 def authoritative_result(path):
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    entered = [line.split()[1] for line in lines if line.startswith("PLAYER_ENTERED ")]
-    winners = [line.split()[1] for line in lines if line.startswith("MATCH_WINNER ")]
-    game_ends = [line for line in lines if line.startswith("GAME_END ")]
-    if sorted(entered) != ["role1", "role2"] or winners != ["role2"] or len(game_ends) != 1:
+    entered = [(index, line.split()[1]) for index, line in enumerate(lines)
+               if line.startswith("PLAYER_ENTERED ")]
+    winners = [(index, line.split()[1]) for index, line in enumerate(lines)
+               if line.startswith("MATCH_WINNER ")]
+    suicides = [(index, line.split()[1]) for index, line in enumerate(lines)
+                if line.startswith("DEATH_SUICIDE ")]
+    game_ends = [index for index, line in enumerate(lines) if line.startswith("GAME_END ")]
+    if (sorted(player for _index, player in entered) != ["role1", "role2"] or
+            [player for _index, player in suicides] != ["role1"] or
+            [player for _index, player in winners] != ["role2"] or len(game_ends) != 1):
         raise ValueError("authoritative exact 1v1 role2 result differs")
-    return {"events": EXPECTED_EVENTS, "winner": "role2"}
+    if not (max(index for index, _player in entered) < suicides[0][0] <
+            winners[0][0] < game_ends[0]):
+        raise ValueError("authoritative exact 1v1 event order differs")
+    return {"events": EXPECTED_EVENTS, "loser": "role1", "winner": "role2"}
+
+
+def browser_input_counts(path):
+    try:
+        states = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise ValueError("invalid browser state evidence: {0}".format(error))
+    if not isinstance(states, list) or len(states) != 2:
+        raise ValueError("browser state identity set differs")
+    by_player = {state.get("player"): state for state in states if isinstance(state, dict)}
+    if set(by_player) != {"role1", "role2"}:
+        raise ValueError("browser state identity set differs")
+    result = {}
+    for player, state in by_player.items():
+        inputs = state.get("finalState", {}).get("input", {})
+        result[player] = {
+            "keyDown": inputs.get("keyDown"), "keyUp": inputs.get("keyUp"),
+            "sdlKeyDown": inputs.get("sdlKeyDown"), "sdlKeyUp": inputs.get("sdlKeyUp"),
+            "acceptedTurns": inputs.get("acceptedActions"),
+        }
+    return result
 
 
 def validate_record(record, index, source_commit=None, input_manifest=None):
@@ -140,8 +172,8 @@ def validate_record(record, index, source_commit=None, input_manifest=None):
             if record.get(name) != input_manifest.get(name):
                 raise ValueError("trial {0}: {1} differs from input manifest".format(index, name))
     if record.get("nativeInput") != {
-            "role1KeyDown": 2, "role1KeyUp": 2,
-            "role1AcceptedTurns": 2, "role2AcceptedTurns": 0}:
+            "role1KeyDown": 3, "role1KeyUp": 3,
+            "role1AcceptedTurns": 3, "role2AcceptedTurns": 0}:
         raise ValueError("trial {0}: native accepted input proof differs".format(index))
     raw_digests = record.get("rawSha256")
     if not isinstance(raw_digests, dict) or set(raw_digests) != RAW_PATHS:
@@ -168,7 +200,8 @@ def validate_record(record, index, source_commit=None, input_manifest=None):
         browser = canonical_json(record["browserCanonical"])
     except (TypeError, ValueError) as error:
         raise ValueError("trial {0}: non-canonical JSON: {1}".format(index, error))
-    expected = canonical_json({"events": EXPECTED_EVENTS, "winner": "role2"})
+    expected = canonical_json({"events": EXPECTED_EVENTS, "loser": "role1",
+                               "winner": "role2"})
     if native != browser:
         raise ValueError("trial {0}: native/browser canonical result differs".format(index))
     if native != expected:
@@ -200,9 +233,16 @@ def verify(evidence_dir, indices, source_commit=None, input_manifest=None):
                 raise ValueError("trial {0}: raw evidence digest differs: {1}".format(index, relative))
         role1 = native_input_counts(raw_dir / "native/input-role1.log")
         role2 = native_input_counts(raw_dir / "native/input-role2.log")
-        if role1 != {"keyDown": 2, "keyUp": 2, "acceptedTurns": 2} or \
+        if role1 != {"keyDown": 3, "keyUp": 3, "acceptedTurns": 3} or \
                 role2 != {"keyDown": 0, "keyUp": 0, "acceptedTurns": 0}:
             raise ValueError("trial {0}: raw native input proof differs".format(index))
+        browser_inputs = browser_input_counts(raw_dir / "browser/states.json")
+        if browser_inputs != {
+                "role1": {"keyDown": 3, "keyUp": 3, "sdlKeyDown": 3,
+                          "sdlKeyUp": 3, "acceptedTurns": 3},
+                "role2": {"keyDown": 0, "keyUp": 0, "sdlKeyDown": 0,
+                          "sdlKeyUp": 0, "acceptedTurns": 0}}:
+            raise ValueError("trial {0}: raw browser input proof differs".format(index))
         for arm, field in (("native", "nativeCanonical"), ("browser", "browserCanonical")):
             try:
                 result = authoritative_result(raw_dir / arm / "ladderlog.txt")

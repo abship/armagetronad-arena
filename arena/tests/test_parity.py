@@ -20,13 +20,15 @@ class ParityTests(unittest.TestCase):
             path = root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(relative.encode("ascii"))
-        for relative in ("arena/config/arena.cfg", "arena/config/native-parity.cfg"):
+        for relative in ("arena/config/arena.cfg", "arena/config/native-parity.cfg",
+                         "arena/config/parity-server.cfg"):
             path = root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes((relative + "\n").encode("ascii"))
 
     def record(self, index=0, browser=None, raw=None):
-        canonical = {"events": PARITY.EXPECTED_EVENTS, "winner": "role2"}
+        canonical = {"events": PARITY.EXPECTED_EVENTS, "loser": "role1",
+                     "winner": "role2"}
         raw = raw or {name: str(position % 10) * 64
                       for position, name in enumerate(sorted(PARITY.RAW_PATHS))}
         return {
@@ -38,8 +40,8 @@ class ParityTests(unittest.TestCase):
             "inputSchedule": PARITY.INPUT_SCHEDULE,
             "inputScheduleSha256": PARITY.hashlib.sha256(
                 PARITY.INPUT_SCHEDULE.encode("ascii")).hexdigest(),
-            "nativeInput": {"role1KeyDown": 2, "role1KeyUp": 2,
-                            "role1AcceptedTurns": 2, "role2AcceptedTurns": 0},
+            "nativeInput": {"role1KeyDown": 3, "role1KeyUp": 3,
+                            "role1AcceptedTurns": 3, "role2AcceptedTurns": 0},
             "rawSha256": raw,
             "browser": "chrome" if index % 2 == 0 else "firefox",
             "nativeCanonical": canonical,
@@ -59,12 +61,21 @@ class ParityTests(unittest.TestCase):
             path = raw_dir / name
             path.parent.mkdir(parents=True, exist_ok=True)
             if name == "native/input-role1.log":
-                data = ("KEY 1 97 0 1\nKEY 0 97 0 1\nACTION CYCLE_TURN_LEFT 1 1 1\n") * 2
+                data = ("KEY 1 97 0 1\nKEY 0 97 0 1\nACTION CYCLE_TURN_LEFT 1 1 1\n") * 3
             elif name == "native/input-role2.log":
                 data = ""
+            elif name == "browser/states.json":
+                data = json.dumps([
+                    {"player": "role1", "finalState": {"input": {
+                        "keyDown": 3, "keyUp": 3, "sdlKeyDown": 3,
+                        "sdlKeyUp": 3, "acceptedActions": 3}}},
+                    {"player": "role2", "finalState": {"input": {
+                        "keyDown": 0, "keyUp": 0, "sdlKeyDown": 0,
+                        "sdlKeyUp": 0, "acceptedActions": 0}}},
+                ]) + "\n"
             elif name.endswith("ladderlog.txt"):
                 data = ("PLAYER_ENTERED role1 0.0.0.0\nPLAYER_ENTERED role2 0.0.0.0\n"
-                        "MATCH_WINNER role2 10\nGAME_END 0\n")
+                        "DEATH_SUICIDE role1\nMATCH_WINNER role2 10\nGAME_END 0\n")
             else:
                 data = name + "\n"
             path.write_text(data, encoding="ascii")
@@ -117,12 +128,36 @@ class ParityTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "digest differs"):
                 PARITY.verify(evidence, [0], "a" * 40)
 
+    def test_verify_rejects_extra_browser_input(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = pathlib.Path(temporary)
+            (evidence / "trials").mkdir()
+            raw = self.write_raw(evidence)
+            states_path = evidence / "raw/trial-000/browser/states.json"
+            states = json.loads(states_path.read_text(encoding="utf-8"))
+            states[0]["finalState"]["input"]["keyDown"] = 4
+            states_path.write_text(json.dumps(states) + "\n", encoding="ascii")
+            raw["browser/states.json"] = PARITY.file_sha256(states_path)
+            (evidence / "trials" / "trial-000.json").write_text(
+                json.dumps(self.record(raw=raw)), encoding="ascii")
+            with self.assertRaisesRegex(ValueError, "browser input proof differs"):
+                PARITY.verify(evidence, [0], "a" * 40)
+
     def test_authoritative_result_rejects_extra_player(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = pathlib.Path(temporary) / "ladderlog.txt"
             path.write_text("PLAYER_ENTERED role1 x\nPLAYER_ENTERED role2 x\n"
-                            "PLAYER_ENTERED extra x\nMATCH_WINNER role2 x\nGAME_END x\n")
+                            "PLAYER_ENTERED extra x\nDEATH_SUICIDE role1\n"
+                            "MATCH_WINNER role2 x\nGAME_END x\n")
             with self.assertRaisesRegex(ValueError, "exact 1v1"):
+                PARITY.authoritative_result(path)
+
+    def test_authoritative_result_rejects_reversed_result_order(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = pathlib.Path(temporary) / "ladderlog.txt"
+            path.write_text("PLAYER_ENTERED role1 x\nPLAYER_ENTERED role2 x\n"
+                            "MATCH_WINNER role2 x\nDEATH_SUICIDE role1\nGAME_END x\n")
+            with self.assertRaisesRegex(ValueError, "event order"):
                 PARITY.authoritative_result(path)
 
     def test_record_rejects_retry_and_schedule_drift(self):

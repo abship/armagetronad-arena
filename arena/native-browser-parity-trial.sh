@@ -93,15 +93,24 @@ index = int(sys.argv[2])
 
 def canonical(log_path):
     lines = pathlib.Path(log_path).read_text(encoding="utf-8", errors="replace").splitlines()
-    entered = [line.split()[1] for line in lines if line.startswith("PLAYER_ENTERED ")]
-    winners = [line.split()[1] for line in lines if line.startswith("MATCH_WINNER ")]
-    game_ends = [line for line in lines if line.startswith("GAME_END ")]
-    if sorted(entered) != ["role1", "role2"]:
+    entered = [(index, line.split()[1]) for index, line in enumerate(lines)
+               if line.startswith("PLAYER_ENTERED ")]
+    winners = [(index, line.split()[1]) for index, line in enumerate(lines)
+               if line.startswith("MATCH_WINNER ")]
+    suicides = [(index, line.split()[1]) for index, line in enumerate(lines)
+                if line.startswith("DEATH_SUICIDE ")]
+    game_ends = [index for index, line in enumerate(lines) if line.startswith("GAME_END ")]
+    if sorted(player for _index, player in entered) != ["role1", "role2"]:
         raise SystemExit("authoritative PLAYER_ENTERED set is not exact")
-    if winners != ["role2"] or len(game_ends) != 1:
+    if ([player for _index, player in suicides] != ["role1"] or
+            [player for _index, player in winners] != ["role2"] or len(game_ends) != 1):
         raise SystemExit("authoritative role2 winner/GAME_END is not exact")
-    return {"events": ["PLAYER_ENTERED", "PLAYER_ENTERED", "MATCH_WINNER", "GAME_END"],
-            "winner": "role2"}
+    if not (max(index for index, _player in entered) < suicides[0][0] <
+            winners[0][0] < game_ends[0]):
+        raise SystemExit("authoritative event order is not exact")
+    return {"events": ["PLAYER_ENTERED", "PLAYER_ENTERED", "DEATH_SUICIDE",
+                       "MATCH_WINNER", "GAME_END"],
+            "loser": "role1", "winner": "role2"}
 
 def digest(file_name):
     import hashlib
@@ -133,8 +142,8 @@ record = {"schema": "arena-native-browser-parity-v1", "trial": index,
           "configSha256": manifest["configSha256"],
           "inputSchedule": manifest["inputSchedule"],
           "inputScheduleSha256": manifest["inputScheduleSha256"],
-          "nativeInput": {"role1KeyDown": 2, "role1KeyUp": 2,
-                          "role1AcceptedTurns": 2, "role2AcceptedTurns": 0},
+          "nativeInput": {"role1KeyDown": 3, "role1KeyUp": 3,
+                          "role1AcceptedTurns": 3, "role2AcceptedTurns": 0},
           "rawSha256": {name: digest(path) for name, path in raw.items()},
           "nativeCanonical": canonical(native_log),
           "browserCanonical": canonical(browser_log),
@@ -158,7 +167,13 @@ run_native() {
         : >"$dir/role$role/input-evidence.log"
     done
     docker run -d --name "arena-parity-native-server-$index" --network host \
-        -v "$dir/server:/arena/var" arena-native-runtime:parity >/dev/null
+        -v "$dir/server:/arena/var" \
+        -v "$arena_dir/config/parity-server.cfg:/arena/data/config/parity-server.cfg:ro" \
+        arena-native-runtime:parity \
+        --datadir /arena/data --configdir /arena/data/config --userconfigdir /arena/var \
+        --vardir /arena/var --resourcedir /arena/data/resource \
+        --autoresourcedir /arena/var/resource-cache --record /arena/var/match.aarec \
+        --extraconfig parity-server.cfg >/dev/null
     for role in 1 2; do
         display=:$((98 + role))
         docker run -d --name "arena-parity-native-role$role-$index" --network host --entrypoint /bin/sh \
@@ -172,9 +187,11 @@ run_native() {
     wait_log "$dir/server/ladderlog.txt" '^PLAYER_ENTERED role2'
     wait_log "$dir/role1/input-evidence.log" '^READY$'
     wait_log "$dir/role2/input-evidence.log" '^READY$'
+    sleep 0.20
     docker exec "arena-parity-native-role1-$index" sh -ec '
         window=$(xdotool search --onlyvisible --name Armagetron | head -n 1)
         xdotool windowfocus "$window"
+        xdotool keydown a; sleep 0.12; xdotool keyup a
         xdotool keydown a; sleep 0.12; xdotool keyup a
         xdotool keydown a; sleep 0.12; xdotool keyup a
     '
@@ -192,7 +209,7 @@ def counts(path):
 
 deadline = time.monotonic() + 5
 while time.monotonic() < deadline:
-    if counts(sys.argv[1]) == (2, 2, 2) and counts(sys.argv[2]) == (0, 0, 0):
+    if counts(sys.argv[1]) == (3, 3, 3) and counts(sys.argv[2]) == (0, 0, 0):
         break
     time.sleep(0.05)
 else:
@@ -210,7 +227,12 @@ run_browser() {
     export ARENA_RELAY_SECRET=ci-only-ephemeral-relay-secret-material
     docker run -d --name "arena-parity-browser-server-$index" --network host \
         -e ARENA_ROSTER_DIR=/arena/roster -v "$dir/server:/arena/var" -v "$dir/roster:/arena/roster:ro" \
-        arena-native-runtime:parity >/dev/null
+        -v "$arena_dir/config/parity-server.cfg:/arena/data/config/parity-server.cfg:ro" \
+        arena-native-runtime:parity \
+        --datadir /arena/data --configdir /arena/data/config --userconfigdir /arena/var \
+        --vardir /arena/var --resourcedir /arena/data/resource \
+        --autoresourcedir /arena/var/resource-cache --record /arena/var/match.aarec \
+        --extraconfig parity-server.cfg >/dev/null
     docker run -d --name "arena-parity-static-$index" --network host -v "$repo_dir:/src:ro" -v "$repo_dir/build/web:/web:ro" -w /src \
         "$EMSDK_IMAGE_LINUX_AMD64" python3 arena/static_server.py --port 8000 --host 127.0.0.1 --directory /web >/dev/null
     docker run -d --name "arena-parity-relay-$index" --network host -e ARENA_RELAY_SECRET -v "$repo_dir:/src:ro" -v "$dir/evidence:/evidence" -v "$dir/roster:/roster" -w /src \

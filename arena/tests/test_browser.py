@@ -559,10 +559,11 @@ return document.querySelectorAll('iframe').length;
             key_name = "KeyA" if number == 0 else "KeyD"
             evidence.append({
                 "player": player,
-                "action": ("KeyA,KeyA" if args.parity_role_schedule and number == 0 else
+                "action": ("KeyA,KeyA,KeyA" if args.parity_role_schedule and number == 0 else
                            "" if args.parity_role_schedule else
                            key_name + "," + ("KeyD" if number == 0 else "KeyA")),
-                "actionCount": 0 if args.parity_role_schedule and number == 1 else 2,
+                "actionCount": (3 if args.parity_role_schedule and number == 0 else
+                                0 if args.parity_role_schedule else 2),
                 "initialState": state,
             })
 
@@ -626,9 +627,11 @@ return document.querySelectorAll('iframe').length;
         for client in sessions:
             arm_frame_metrics(args.webdriver_url, client)
 
-        # The parity schedule deliberately drives role1 into its wall twice;
+        # The parity schedule deliberately drives role1 into its own trail;
         # role2 receives no input, making the authoritative winner role2.
         if args.parity_role_schedule:
+            time.sleep(0.20)
+            send_client_turn(args.webdriver_url, sessions[0], "a")
             send_client_turn(args.webdriver_url, sessions[0], "a")
             send_client_turn(args.webdriver_url, sessions[0], "a")
         else:
@@ -641,20 +644,30 @@ return document.querySelectorAll('iframe').length;
 
         for index, client in enumerate(sessions):
             _session, player, _frame = client
+            if args.parity_role_schedule and index == 0:
+                input_pass = (lambda value: value.get("input") and
+                              value["input"].get("keyDown", 0) == 3 and
+                              value["input"].get("keyUp", 0) == 3 and
+                              value["input"].get("sdlKeyDown", 0) == 3 and
+                              value["input"].get("sdlKeyUp", 0) == 3 and
+                              value["input"].get("acceptedActions", 0) == 3)
+            elif args.parity_role_schedule:
+                input_pass = (lambda value: value.get("input") and
+                              value["input"].get("keyDown", 0) == 0 and
+                              value["input"].get("keyUp", 0) == 0 and
+                              value["input"].get("sdlKeyDown", 0) == 0 and
+                              value["input"].get("sdlKeyUp", 0) == 0 and
+                              value["input"].get("acceptedActions", 0) == 0)
+            else:
+                input_pass = (lambda value: value.get("input") and
+                              value["input"].get("keyDown", 0) >= 2 and
+                              value["input"].get("keyUp", 0) >= 2 and
+                              value["input"].get("acceptedActions", 0) >= 1)
             wait_for_state(
                 args.webdriver_url, client,
                 15,
                 player + " received W3C controls in the browser",
-                (lambda value: value.get("input") and
-                 value["input"].get("keyDown", 0) >= 2 and
-                 value["input"].get("keyUp", 0) >= 2 and
-                 value["input"].get("acceptedActions", 0) >=
-                (2 if args.parity_role_schedule else 1))
-                if not args.parity_role_schedule or index == 0 else
-                (lambda value: value.get("input") and
-                 value["input"].get("keyDown", 0) == 0 and
-                 value["input"].get("keyUp", 0) == 0 and
-                 value["input"].get("acceptedActions", 0) == 0),
+                input_pass,
             )
 
         def authoritative_result():

@@ -20,10 +20,13 @@ SDL path under isolated Xvfb displays. This image does not replace or modify the
 production linux/amd64 dedicated artifact.
 
 Both arms use the versioned schedule
-`role1:a(120ms),a(120ms);role2:none`: each role1 `a` is held for 120 ms and the
-second begins immediately after the first release. The harness
-requires both role1 turns to be delivered and accepted, exactly one entry for
-each role, exactly one authoritative role2 match winner, and exactly one
+`role1:wait(200ms),a(120ms),a(120ms),a(120ms);role2:none`: after both local
+objects are live, role1 first travels straight for 200 ms. Each `a` is then
+held for 120 ms and the next begins immediately after release. The three left
+turns close a small upstream trail loop. The harness requires all three role1 turns
+to be delivered and accepted, exactly one entry for
+each role, exactly one role1 suicide before the sole authoritative role2 match
+winner, no role2 suicide, and exactly one
 `GAME_END`. The canonical event/winner result must match per index. Raw ladder
 logs, recordings, browser state, and relay datagram evidence are retained.
 Every record binds the exact source commit plus native-client, native-server,
