@@ -78,7 +78,8 @@ Module['preRun'].push(function() {
   if (arenaParityVisuals) {
     // autoexec.cfg loads after settings_visual.cfg; user.cfg loads before it.
     FS.writeFile('/user/var/autoexec.cfg',
-      'FLOOR_DETAIL 1\nFLOOR_RED 1\nFLOOR_GREEN .25\nFLOOR_BLUE .25\nGRID_SIZE 5\n');
+      'FLOOR_DETAIL 2\nTEXTURE_MODE_0 -1\n' +
+      'FLOOR_RED 1\nFLOOR_GREEN .25\nFLOOR_BLUE .25\n');
   }
 });
 Module['arguments'] = [

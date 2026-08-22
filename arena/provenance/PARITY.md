@@ -32,10 +32,11 @@ two symmetric, zone-free straight lanes in a large rim. An unsteered role2 is
 safe for minutes, while the one accepted role1 turn reaches a static lane rail
 with a wide timing margin. Thus client scheduler latency cannot choose the
 winner, and absence of the action cannot produce the required result. The
-parity client profiles select the upstream grid-floor renderer with a fixed
-color and spacing so the unchanged live-frame entropy assertion has persistent
-geometry on this deliberately sparse map; this is client-local and has no game
-or server effect.
+parity client profiles select the normal upstream floor-plane renderer with
+its texture disabled and a fixed color, so the unchanged live-frame entropy
+assertion has a persistent render surface on this deliberately sparse map.
+This is evidence of upstream canvas and render-pass presentation, is
+client-local, and has no game or server effect.
 
 The harness requires all setup and measured turns to be delivered and accepted,
 exactly one entry for each role, only the bounded optional pre-admission round,
