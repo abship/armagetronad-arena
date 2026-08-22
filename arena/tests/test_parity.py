@@ -44,6 +44,8 @@ class ParityTests(unittest.TestCase):
                             "role1AcceptedTurns": 3, "role2AcceptedTurns": 0},
             "nativeSetupInput": {"role1KeyDown": 3, "role1KeyUp": 3,
                                  "role1AcceptedTurns": 3, "role2AcceptedTurns": 0},
+            "nativeBoundary": {"setupNewMatch": 1, "measuredNewMatch": 2},
+            "browserBoundary": {"setupNewMatch": 1, "measuredNewMatch": 2},
             "rawSha256": raw,
             "browser": "chrome" if index % 2 == 0 else "firefox",
             "nativeCanonical": canonical,
@@ -83,6 +85,8 @@ class ParityTests(unittest.TestCase):
                          "keyDown": 0, "keyUp": 0, "sdlKeyDown": 0,
                          "sdlKeyUp": 0, "acceptedActions": 0}}},
                 ]) + "\n"
+            elif name.endswith("boundary.json"):
+                data = '{"measuredNewMatch":2,"setupNewMatch":1}\n'
             elif name.endswith("ladderlog.txt"):
                 data = ("PLAYER_ENTERED role1 0.0.0.0\nPLAYER_ENTERED role2 0.0.0.0\n"
                         "NEW_MATCH setup\nDEATH_SUICIDE role1\n"
@@ -166,7 +170,8 @@ class ParityTests(unittest.TestCase):
                             "NEW_MATCH controlled\nDEATH_SUICIDE role1\n"
                             "ROUND_WINNER role2 x\nMATCH_WINNER role2 x\nGAME_END x\n")
             with self.assertRaisesRegex(ValueError, "exact 1v1"):
-                PARITY.authoritative_result(path)
+                PARITY.authoritative_result(
+                    path, {"setupNewMatch": 1, "measuredNewMatch": 2})
 
     def test_authoritative_result_rejects_reversed_result_order(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -176,7 +181,8 @@ class ParityTests(unittest.TestCase):
                             "MATCH_WINNER role2 x\nDEATH_SUICIDE role1\n"
                             "ROUND_WINNER role2 x\nGAME_END x\n")
             with self.assertRaisesRegex(ValueError, "event order"):
-                PARITY.authoritative_result(path)
+                PARITY.authoritative_result(
+                    path, {"setupNewMatch": 1, "measuredNewMatch": 2})
 
     def test_authoritative_result_rejects_unexpected_setup_result(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -186,7 +192,44 @@ class ParityTests(unittest.TestCase):
                             "NEW_MATCH controlled\nDEATH_SUICIDE role1\n"
                             "ROUND_WINNER role2 x\nMATCH_WINNER role2 x\nGAME_END x\n")
             with self.assertRaisesRegex(ValueError, "setup result"):
-                PARITY.authoritative_result(path)
+                PARITY.authoritative_result(
+                    path, {"setupNewMatch": 1, "measuredNewMatch": 2})
+
+    def test_authoritative_result_accepts_bounded_pre_admission_round(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = pathlib.Path(temporary) / "ladderlog.txt"
+            path.write_text(
+                "PLAYER_ENTERED role1 x\nNEW_MATCH prelude\n"
+                "PLAYER_ENTERED role2 x\nDEATH_SUICIDE role1\n"
+                "NEW_MATCH setup\nDEATH_SUICIDE role1\nROUND_WINNER role2 x\n"
+                "MATCH_WINNER role2 x\nNEW_MATCH controlled\n"
+                "DEATH_SUICIDE role1\nROUND_WINNER role2 x\n"
+                "MATCH_WINNER role2 x\nGAME_END x\n")
+            self.assertEqual(
+                PARITY.authoritative_result(
+                    path, {"setupNewMatch": 2, "measuredNewMatch": 3})["winner"],
+                "role2")
+
+    def test_authoritative_result_rejects_unbounded_prelude(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = pathlib.Path(temporary) / "ladderlog.txt"
+            path.write_text(
+                "PLAYER_ENTERED role1 x\nNEW_MATCH prelude\n"
+                "PLAYER_ENTERED role2 x\nDEATH_SUICIDE role2\n"
+                "NEW_MATCH setup\nDEATH_SUICIDE role1\n"
+                "NEW_MATCH controlled\nDEATH_SUICIDE role1\n"
+                "ROUND_WINNER role2 x\nMATCH_WINNER role2 x\nGAME_END x\n")
+            with self.assertRaisesRegex(ValueError, "pre-admission"):
+                PARITY.authoritative_result(
+                    path, {"setupNewMatch": 2, "measuredNewMatch": 3})
+
+    def test_authoritative_result_rejects_boolean_boundary(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = pathlib.Path(temporary) / "ladderlog.txt"
+            path.write_text("PLAYER_ENTERED role1 x\nPLAYER_ENTERED role2 x\n")
+            with self.assertRaisesRegex(ValueError, "boundary"):
+                PARITY.authoritative_result(
+                    path, {"setupNewMatch": True, "measuredNewMatch": 2})
 
     def test_record_rejects_retry_and_schedule_drift(self):
         retry = self.record()

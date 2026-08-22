@@ -486,7 +486,7 @@ def main():
     initial_log_size = server_log.stat().st_size if server_log.exists() else 0
     sessions = []
     evidence = []
-    parity_boundary_new_match = None
+    parity_boundary = None
 
     try:
         def make_client_url(number):
@@ -618,7 +618,7 @@ return document.querySelectorAll('iframe').length;
             if not server_log.exists():
                 return None
             with server_log.open("r", encoding="utf-8", errors="replace") as source:
-                source.seek(initial_log_size)
+                source.seek(0 if args.parity_role_schedule else initial_log_size)
                 return source.read()
 
         def players_ready():
@@ -653,9 +653,10 @@ return document.querySelectorAll('iframe').length;
         )
         if args.parity_role_schedule:
             baseline_new_matches = sum(
-                line.startswith("NEW_MATCH ") for line in server_result().splitlines()
+                line.startswith("NEW_MATCH ")
+                for line in server_result().splitlines()
             )
-            if baseline_new_matches != 1:
+            if baseline_new_matches not in (1, 2):
                 raise RuntimeError("setup round NEW_MATCH count is not exact")
             send_server_command(args.server_control, "START_NEW_MATCH")
             wait_for(
@@ -686,11 +687,17 @@ return document.querySelectorAll('iframe').length;
                 lambda: server_result() if sum(
                     line.startswith("NEW_MATCH ")
                     for line in server_result().splitlines()
-                ) > baseline_new_matches else None,
+                ) == baseline_new_matches + 1 else None,
                 45,
                 "post-admission NEW_MATCH boundary",
             )
-            parity_boundary_new_match = baseline_new_matches + 1
+            parity_boundary = {
+                "setupNewMatch": baseline_new_matches,
+                "measuredNewMatch": baseline_new_matches + 1,
+            }
+            (evidence_dir / "parity-boundary.json").write_text(
+                json.dumps(parity_boundary, sort_keys=True) + "\n", encoding="ascii"
+            )
             live_states = wait_for(
                 both_players_live, 60, "both cycles live after setup boundary"
             )
@@ -778,9 +785,10 @@ return document.querySelectorAll('iframe').length;
             if args.parity_role_schedule:
                 boundaries = [index for index, line in enumerate(lines)
                               if line.startswith("NEW_MATCH ")]
-                if len(boundaries) < parity_boundary_new_match:
+                measured = parity_boundary["measuredNewMatch"]
+                if len(boundaries) < measured:
                     return None
-                result_lines = lines[boundaries[parity_boundary_new_match - 1]:]
+                result_lines = lines[boundaries[measured - 1]:]
             finished = any(
                 "MATCH_WINNER" in line and
                 ((args.parity_role_schedule and "role2" in line) or

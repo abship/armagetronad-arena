@@ -15,7 +15,7 @@ INPUT_SCHEMA = "arena-native-browser-parity-inputs-v1"
 EXPECTED_EVENTS = ["NEW_MATCH", "DEATH_SUICIDE", "ROUND_WINNER",
                    "MATCH_WINNER", "GAME_END"]
 INPUT_SCHEDULE = ("setup:start-new-match,wait(200ms),role1:a(120ms)x3;"
-                  "boundary:second-new-match,reset-input-evidence;"
+                  "boundary:first-post-command-new-match,reset-input-evidence;"
                   "measured:wait(200ms),role1:a(120ms)x3,role2:none")
 BUILD_PATHS = {
     "nativeClient": "build/native-parity/amd64/armagetronad",
@@ -27,8 +27,9 @@ RAW_PATHS = {
     "native/server-console.log",
     "native/setup-input-role1.log", "native/setup-input-role2.log",
     "native/input-role1.log", "native/input-role2.log",
+    "native/boundary.json",
     "browser/ladderlog.txt", "browser/match.aarec", "browser/server-console.log",
-    "browser/states.json", "browser/relay.jsonl",
+    "browser/states.json", "browser/relay.jsonl", "browser/boundary.json",
 }
 
 
@@ -104,13 +105,38 @@ def native_input_counts(path):
     }
 
 
-def authoritative_result(path):
+def match_boundary(value):
+    if (not isinstance(value, dict) or set(value) != {
+            "setupNewMatch", "measuredNewMatch"}):
+        raise ValueError("authoritative match boundary differs")
+    setup = value["setupNewMatch"]
+    measured = value["measuredNewMatch"]
+    if (type(setup) is not int or type(measured) is not int or
+            setup not in (1, 2) or measured != setup + 1):
+        raise ValueError("authoritative match boundary differs")
+    return setup, measured
+
+
+def authoritative_result(path, boundary):
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     entered = [line.split()[1] for line in lines if line.startswith("PLAYER_ENTERED ")]
     boundaries = [index for index, line in enumerate(lines) if line.startswith("NEW_MATCH ")]
-    if sorted(entered) != ["role1", "role2"] or len(boundaries) != 2:
+    setup_ordinal, measured_ordinal = match_boundary(boundary)
+    if (sorted(entered) != ["role1", "role2"] or
+            len(boundaries) != measured_ordinal):
         raise ValueError("authoritative exact 1v1 role2 result differs")
-    setup = list(enumerate(lines[boundaries[0]:boundaries[1]], boundaries[0]))
+    if setup_ordinal == 2:
+        prelude = list(enumerate(lines[boundaries[0]:boundaries[1]], boundaries[0]))
+        prelude_deaths = [(index, line.split()[0], line.split()[1])
+                          for index, line in prelude if line.startswith("DEATH_")]
+        if ([(event, player) for _index, event, player in prelude_deaths] !=
+                [("DEATH_SUICIDE", "role1")] or
+                any(line.startswith(("ROUND_WINNER ", "MATCH_WINNER ", "GAME_END "))
+                    for _index, line in prelude)):
+            raise ValueError("authoritative pre-admission result differs")
+    setup_start = boundaries[setup_ordinal - 1]
+    measured_start = boundaries[measured_ordinal - 1]
+    setup = list(enumerate(lines[setup_start:measured_start], setup_start))
     setup_deaths = [(index, line.split()[0], line.split()[1]) for index, line in setup
                     if line.startswith("DEATH_")]
     setup_round_winners = [(index, line.split()[1]) for index, line in setup
@@ -134,7 +160,7 @@ def authoritative_result(path):
     if setup_match_winners and (not setup_round_winners or
             not setup_round_winners[0][0] < setup_match_winners[0][0]):
         raise ValueError("authoritative setup winner order differs")
-    segment = list(enumerate(lines[boundaries[1]:], boundaries[1]))
+    segment = list(enumerate(lines[measured_start:], measured_start))
     deaths = [(index, line.split()[0], line.split()[1]) for index, line in segment
               if line.startswith("DEATH_")]
     round_winners = [(index, line.split()[1]) for index, line in segment
@@ -152,7 +178,7 @@ def authoritative_result(path):
             any(event != "DEATH_SUICIDE" or player != "role2"
                 for _index, event, player in cleanup_deaths)):
         raise ValueError("authoritative exact 1v1 cleanup differs")
-    if not (boundaries[1] < deaths[0][0] < round_winners[0][0] <
+    if not (measured_start < deaths[0][0] < round_winners[0][0] <
             match_winners[0][0] < game_ends[0]):
         raise ValueError("authoritative exact 1v1 event order differs")
     if cleanup_deaths and not (round_winners[0][0] < cleanup_deaths[0][0] < game_ends[0]):
@@ -220,6 +246,11 @@ def validate_record(record, index, source_commit=None, input_manifest=None):
             "role1KeyDown": 3, "role1KeyUp": 3,
             "role1AcceptedTurns": 3, "role2AcceptedTurns": 0}:
         raise ValueError("trial {0}: native setup input proof differs".format(index))
+    for name in ("nativeBoundary", "browserBoundary"):
+        try:
+            match_boundary(record.get(name))
+        except ValueError:
+            raise ValueError("trial {0}: {1} differs".format(index, name))
     raw_digests = record.get("rawSha256")
     if not isinstance(raw_digests, dict) or set(raw_digests) != RAW_PATHS:
         raise ValueError("trial {0}: raw evidence set differs".format(index))
@@ -308,8 +339,12 @@ def verify(evidence_dir, indices, source_commit=None, input_manifest=None):
                 raise ValueError("trial {0}: {1} reset acknowledgement differs".format(
                     index, arm))
         for arm, field in (("native", "nativeCanonical"), ("browser", "browserCanonical")):
+            boundary = json.loads((raw_dir / arm / "boundary.json").read_text(
+                encoding="ascii"))
+            if boundary != record[arm + "Boundary"]:
+                raise ValueError("trial {0}: raw {1} boundary differs".format(index, arm))
             try:
-                result = authoritative_result(raw_dir / arm / "ladderlog.txt")
+                result = authoritative_result(raw_dir / arm / "ladderlog.txt", boundary)
             except ValueError as error:
                 raise ValueError("trial {0}: {1}".format(index, error))
             if canonical_json(result) != canonical_json(record[field]):

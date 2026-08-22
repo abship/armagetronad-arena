@@ -141,74 +141,26 @@ write_record() {
     cp "$native_dir/role2/setup-input-evidence.log" "$raw_dir/native/setup-input-role2.log"
     cp "$native_dir/role1/input-evidence.log" "$raw_dir/native/input-role1.log"
     cp "$native_dir/role2/input-evidence.log" "$raw_dir/native/input-role2.log"
+    cp "$native_dir/boundary.json" "$raw_dir/native/boundary.json"
+    cp "$browser_dir/evidence/parity-boundary.json" "$raw_dir/browser/boundary.json"
     python3 - "$evidence_dir/trials/trial-$(printf %03d "$index").json" \
         "$index" "$browser" "$source_commit" "$ARENA_PARITY_INPUT_MANIFEST" \
+        "$arena_dir/parity.py" \
         "$raw_dir/native/ladderlog.txt" "$raw_dir/native/match.aarec" \
         "$raw_dir/native/server-console.log" \
         "$raw_dir/browser/ladderlog.txt" "$raw_dir/browser/match.aarec" \
         "$raw_dir/browser/server-console.log" \
         "$raw_dir/native/setup-input-role1.log" "$raw_dir/native/setup-input-role2.log" \
         "$raw_dir/native/input-role1.log" "$raw_dir/native/input-role2.log" \
-        "$raw_dir/browser/states.json" "$raw_dir/browser/relay.jsonl" <<'PY'
-import json, pathlib, sys
+        "$raw_dir/browser/states.json" "$raw_dir/browser/relay.jsonl" \
+        "$raw_dir/native/boundary.json" "$raw_dir/browser/boundary.json" <<'PY'
+import importlib.util, json, pathlib, sys
 path = pathlib.Path(sys.argv[1])
 index = int(sys.argv[2])
 
-def canonical(log_path):
-    lines = pathlib.Path(log_path).read_text(encoding="utf-8", errors="replace").splitlines()
-    entered = [line.split()[1] for line in lines if line.startswith("PLAYER_ENTERED ")]
-    boundaries = [index for index, line in enumerate(lines) if line.startswith("NEW_MATCH ")]
-    if sorted(entered) != ["role1", "role2"] or len(boundaries) != 2:
-        raise SystemExit("authoritative entry/boundary set is not exact")
-    setup = list(enumerate(lines[boundaries[0]:boundaries[1]], boundaries[0]))
-    setup_deaths = [(index, line.split()[0], line.split()[1]) for index, line in setup
-                    if line.startswith("DEATH_")]
-    setup_round_winners = [(index, line.split()[1]) for index, line in setup
-                           if line.startswith("ROUND_WINNER ")]
-    setup_match_winners = [(index, line.split()[1]) for index, line in setup
-                           if line.startswith("MATCH_WINNER ")]
-    if (not setup_deaths or setup_deaths[0][1:] != ("DEATH_SUICIDE", "role1") or
-            len(setup_deaths) > 2 or
-            any(event != "DEATH_SUICIDE" or player != "role2"
-                for _index, event, player in setup_deaths[1:]) or
-            len(setup_round_winners) > 1 or
-            any(player != "role2" for _index, player in setup_round_winners) or
-            len(setup_match_winners) > 1 or
-            any(player != "role2" for _index, player in setup_match_winners)):
-        raise SystemExit("authoritative setup result is not exact")
-    if setup_round_winners and not setup_deaths[0][0] < setup_round_winners[0][0]:
-        raise SystemExit("authoritative setup event order is not exact")
-    if setup_deaths[1:] and (not setup_round_winners or
-            not setup_round_winners[0][0] < setup_deaths[1][0]):
-        raise SystemExit("authoritative setup cleanup order is not exact")
-    if setup_match_winners and (not setup_round_winners or
-            not setup_round_winners[0][0] < setup_match_winners[0][0]):
-        raise SystemExit("authoritative setup winner order is not exact")
-    segment = list(enumerate(lines[boundaries[1]:], boundaries[1]))
-    deaths = [(index, line.split()[0], line.split()[1]) for index, line in segment
-              if line.startswith("DEATH_")]
-    round_winners = [(index, line.split()[1]) for index, line in segment
-                     if line.startswith("ROUND_WINNER ")]
-    match_winners = [(index, line.split()[1]) for index, line in segment
-                     if line.startswith("MATCH_WINNER ")]
-    game_ends = [index for index, line in segment if line.startswith("GAME_END ")]
-    if (not deaths or deaths[0][1:] != ("DEATH_SUICIDE", "role1") or
-            len(round_winners) != 1 or round_winners[0][1] != "role2" or
-            len(match_winners) != 1 or match_winners[0][1] != "role2" or
-            len(game_ends) != 1):
-        raise SystemExit("authoritative controlled role2 result is not exact")
-    cleanup = deaths[1:]
-    if (len(cleanup) > 1 or any(event != "DEATH_SUICIDE" or player != "role2"
-                                for _index, event, player in cleanup)):
-        raise SystemExit("authoritative cleanup death set is not exact")
-    if not (boundaries[1] < deaths[0][0] < round_winners[0][0] <
-            match_winners[0][0] < game_ends[0]):
-        raise SystemExit("authoritative controlled event order is not exact")
-    if cleanup and not (round_winners[0][0] < cleanup[0][0] < game_ends[0]):
-        raise SystemExit("authoritative cleanup event order is not exact")
-    return {"events": ["NEW_MATCH", "DEATH_SUICIDE", "ROUND_WINNER",
-                       "MATCH_WINNER", "GAME_END"],
-            "loser": "role1", "winner": "role2"}
+spec = importlib.util.spec_from_file_location("arena_parity", sys.argv[6])
+parity = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(parity)
 
 def digest(file_name):
     import hashlib
@@ -219,11 +171,14 @@ def digest(file_name):
     return value.hexdigest()
 
 manifest = json.loads(pathlib.Path(sys.argv[5]).read_text(encoding="utf-8"))
-native_log, native_recording, native_console = sys.argv[6], sys.argv[7], sys.argv[8]
-browser_log, browser_recording, browser_console = sys.argv[9], sys.argv[10], sys.argv[11]
-native_setup1, native_setup2 = sys.argv[12], sys.argv[13]
-native_input1, native_input2 = sys.argv[14], sys.argv[15]
-browser_states, browser_relay = sys.argv[16], sys.argv[17]
+native_log, native_recording, native_console = sys.argv[7], sys.argv[8], sys.argv[9]
+browser_log, browser_recording, browser_console = sys.argv[10], sys.argv[11], sys.argv[12]
+native_setup1, native_setup2 = sys.argv[13], sys.argv[14]
+native_input1, native_input2 = sys.argv[15], sys.argv[16]
+browser_states, browser_relay = sys.argv[17], sys.argv[18]
+native_boundary_path, browser_boundary_path = sys.argv[19], sys.argv[20]
+native_boundary = json.loads(pathlib.Path(native_boundary_path).read_text(encoding="ascii"))
+browser_boundary = json.loads(pathlib.Path(browser_boundary_path).read_text(encoding="ascii"))
 raw = {
     "native/ladderlog.txt": native_log,
     "native/match.aarec": native_recording,
@@ -237,6 +192,8 @@ raw = {
     "browser/server-console.log": browser_console,
     "browser/states.json": browser_states,
     "browser/relay.jsonl": browser_relay,
+    "native/boundary.json": native_boundary_path,
+    "browser/boundary.json": browser_boundary_path,
 }
 record = {"schema": "arena-native-browser-parity-v1", "trial": index,
           "browser": sys.argv[3], "sourceCommit": sys.argv[4],
@@ -249,9 +206,13 @@ record = {"schema": "arena-native-browser-parity-v1", "trial": index,
                           "role1AcceptedTurns": 3, "role2AcceptedTurns": 0},
           "nativeSetupInput": {"role1KeyDown": 3, "role1KeyUp": 3,
                                "role1AcceptedTurns": 3, "role2AcceptedTurns": 0},
+          "nativeBoundary": native_boundary,
+          "browserBoundary": browser_boundary,
           "rawSha256": {name: digest(path) for name, path in raw.items()},
-          "nativeCanonical": canonical(native_log),
-          "browserCanonical": canonical(browser_log),
+          "nativeCanonical": parity.authoritative_result(
+              pathlib.Path(native_log), native_boundary),
+          "browserCanonical": parity.authoritative_result(
+              pathlib.Path(browser_log), browser_boundary),
           "nativeServer": {"fresh": True, "gameEnd": True,
                            "logSha256": digest(native_log),
                            "recordingSha256": digest(native_recording)},
@@ -296,14 +257,17 @@ run_native() {
     done
     wait_log "$dir/server/ladderlog.txt" '^PLAYER_ENTERED role1'
     wait_log "$dir/server/ladderlog.txt" '^PLAYER_ENTERED role2'
-    wait_log "$dir/role1/input-evidence.log" '^READY 1$'
-    wait_log "$dir/role2/input-evidence.log" '^READY 1$'
-    test "$(grep -c '^NEW_MATCH ' "$dir/server/ladderlog.txt")" -eq 1 || {
+    wait_log "$dir/role1/input-evidence.log" '^READY [0-9][0-9]*$'
+    wait_log "$dir/role2/input-evidence.log" '^READY [0-9][0-9]*$'
+    baseline_new_matches=$(grep -c '^NEW_MATCH ' "$dir/server/ladderlog.txt")
+    test "$baseline_new_matches" -eq 1 || test "$baseline_new_matches" -eq 2 || {
         echo "native setup NEW_MATCH count is not exact" >&2
         return 1
     }
     printf 'START_NEW_MATCH\n' >&3
     wait_log "$dir/server-console.log" 'Resetting scores and starting new match after this round'
+    : >"$dir/role1/input-evidence.log"
+    : >"$dir/role2/input-evidence.log"
     sleep 0.20
     docker exec "arena-parity-native-role1-$index" sh -ec '
         window=$(xdotool search --onlyvisible --name Armagetron | head -n 1)
@@ -312,9 +276,22 @@ run_native() {
         xdotool keydown a; sleep 0.12; xdotool keyup a
         xdotool keydown a; sleep 0.12; xdotool keyup a
     '
-    wait_log_count "$dir/server/ladderlog.txt" '^NEW_MATCH ' 2
-    wait_log "$dir/role1/input-evidence.log" '^READY 2$'
-    wait_log "$dir/role2/input-evidence.log" '^READY 2$'
+    measured_new_match=$((baseline_new_matches + 1))
+    wait_log_count "$dir/server/ladderlog.txt" '^NEW_MATCH ' "$measured_new_match"
+    test "$(grep -c '^NEW_MATCH ' "$dir/server/ladderlog.txt")" -eq \
+        "$measured_new_match" || {
+        echo "native measured NEW_MATCH boundary is not exact" >&2
+        return 1
+    }
+    wait_log "$dir/role1/input-evidence.log" '^READY [0-9][0-9]*$'
+    wait_log "$dir/role2/input-evidence.log" '^READY [0-9][0-9]*$'
+    test "$(grep -c '^NEW_MATCH ' "$dir/server/ladderlog.txt")" -eq \
+        "$measured_new_match" || {
+        echo "native post-readiness NEW_MATCH boundary is not exact" >&2
+        return 1
+    }
+    printf '{"measuredNewMatch":%s,"setupNewMatch":%s}\n' \
+        "$measured_new_match" "$baseline_new_matches" >"$dir/boundary.json"
     cp "$dir/role1/input-evidence.log" "$dir/role1/setup-input-evidence.log"
     cp "$dir/role2/input-evidence.log" "$dir/role2/setup-input-evidence.log"
     : >"$dir/role1/input-evidence.log"
