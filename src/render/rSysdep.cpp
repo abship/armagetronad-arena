@@ -663,8 +663,8 @@ void rSysDep::SwapGL(){
     }
 
 #ifdef __EMSCRIPTEN__
-    // Capture test evidence while the completed frame is still in the WebGL
-    // drawing buffer. The caller clears it immediately after SwapGL returns.
+    // Reuse the existing test-evidence bridge for optional frame capture and
+    // test-armed cadence/memory samples. Unarmed clients only look up a property.
     EM_ASM({
         if ( Module['arenaCaptureRequested'] )
         {
@@ -678,6 +678,19 @@ void rSysDep::SwapGL(){
             {
                 Module['arenaCapturedFrame'] = 'error:' + String(error);
             }
+        }
+        var metrics = Module['arenaFrameMetrics'];
+        if ( metrics && metrics['armed'] )
+        {
+            var now = performance.now();
+            if ( typeof metrics['previousNow'] === 'number' )
+            {
+                var gaps = metrics['gaps'];
+                gaps.push( now - metrics['previousNow'] );
+                if ( gaps.length > 256 ) gaps.shift();
+            }
+            metrics['previousNow'] = now;
+            metrics['heapBytes'] = HEAPU8.buffer.byteLength;
         }
     });
 #endif

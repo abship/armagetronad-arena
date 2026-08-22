@@ -25,6 +25,7 @@ ARENA_DIR = pathlib.Path(__file__).resolve().parents[1]
 RELAY_SPEC = importlib.util.spec_from_file_location("arena_relay", ARENA_DIR / "relay.py")
 RELAY = importlib.util.module_from_spec(RELAY_SPEC)
 RELAY_SPEC.loader.exec_module(RELAY)
+MIB = 1024 * 1024
 
 
 def redact(value):
@@ -271,9 +272,34 @@ def inspect_png(png):
     return result
 
 
+def summarize_frame_metrics(metrics):
+    gaps = sorted(float(value) for value in metrics.get("gaps", []))
+    rank = max(0, int(math.ceil(0.95 * len(gaps))) - 1)
+    initial_heap = int(metrics.get("initialHeapBytes", 0))
+    heap = int(metrics.get("heapBytes", initial_heap))
+    return {
+        "sampleCount": len(gaps),
+        "p95GapMs": round(gaps[rank], 3) if gaps else None,
+        "maxGapMs": round(max(gaps), 3) if gaps else None,
+        "initialHeapBytes": initial_heap,
+        "heapBytes": heap,
+        "heapGrowthBytes": max(0, heap - initial_heap),
+    }
+
+
+def frame_metrics_pass(metrics):
+    return (
+        metrics.get("sampleCount", 0) >= 20 and
+        metrics.get("p95GapMs") is not None and metrics["p95GapMs"] <= 250 and
+        metrics.get("maxGapMs") is not None and metrics["maxGapMs"] <= 750 and
+        metrics.get("heapBytes", 257 * MIB) <= 256 * MIB and
+        metrics.get("heapGrowthBytes", 33 * MIB) <= 32 * MIB
+    )
+
+
 def browser_state(base, client):
     session = select_client(base, client)
-    return execute(
+    state = execute(
         base,
         session,
         """
@@ -319,6 +345,31 @@ return (function() {
     title: document.title
   };
 })();
+""",
+    )
+    metrics = execute(
+        base,
+        session,
+        "return (typeof Module !== 'undefined' && Module['arenaFrameMetrics']) || null;",
+    )
+    if isinstance(state, dict) and isinstance(metrics, dict):
+        state["frameMetrics"] = summarize_frame_metrics(metrics)
+    return state
+
+
+def arm_frame_metrics(base, client):
+    session = select_client(base, client)
+    return execute(
+        base,
+        session,
+        """
+Module['arenaFrameMetrics'] = {
+  armed: true,
+  gaps: [],
+  initialHeapBytes: HEAPU8.buffer.byteLength,
+  heapBytes: HEAPU8.buffer.byteLength
+};
+return true;
 """,
     )
 
@@ -559,6 +610,9 @@ return document.querySelectorAll('iframe').length;
             (evidence_dir / (player + ".png")).write_bytes(capture["png"])
             evidence[index]["liveRender"] = capture["render"]
 
+        for client in sessions:
+            arm_frame_metrics(args.webdriver_url, client)
+
         # Act immediately while both upstream-controlled cycle objects are
         # alive. A nonnegative game timer also covers the dead/inter-round phase.
         send_client_turn(
@@ -623,7 +677,11 @@ return document.querySelectorAll('iframe').length;
                 value["transport"].get("open", 0) >= 1 and
                 value["transport"].get("failed", 0) == 0 and
                 value["transport"].get("sentDatagrams", 0) > 0 and
-                value["transport"].get("receivedDatagrams", 0) > 0,
+                value["transport"].get("receivedDatagrams", 0) > 0 and
+                value.get("gl") and value["gl"].get("available") and
+                not value["gl"].get("lost") and
+                value.get("frameMetrics") and
+                frame_metrics_pass(value["frameMetrics"]),
             )
             evidence[index]["finalState"] = final_state
         (evidence_dir / (args.browser + "-states.json")).write_text(

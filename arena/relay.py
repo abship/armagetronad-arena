@@ -101,7 +101,9 @@ class RelayServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     daemon_threads = True
 
     def __init__(self, address, udp_target, secret, allowed_origins, max_datagram,
-                 max_rate, evidence_path=None, max_nonces=65536, roster_dir=None):
+                 max_rate, evidence_path=None, max_nonces=65536, roster_dir=None,
+                 drop_browser_to_native_every=0,
+                 drop_native_to_browser_every=0):
         self.udp_target = udp_target
         self.secret = secret
         self.allowed_origins = set(allowed_origins)
@@ -110,6 +112,8 @@ class RelayServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
         self.max_nonces = max_nonces
         self.evidence_path = evidence_path
         self.roster_dir = roster_dir
+        self.drop_browser_to_native_every = drop_browser_to_native_every
+        self.drop_native_to_browser_every = drop_native_to_browser_every
         self._nonces = {}
         self._active_slots = set()
         self._lock = threading.Lock()
@@ -261,6 +265,8 @@ class RelayHandler(socketserver.BaseRequestHandler):
             udp.setblocking(False)
             self.request.settimeout(5)
             recent = collections.deque()
+            browser_to_native_count = 0
+            native_to_browser_count = 0
             while True:
                 readable, _, _ = select.select((self.request, udp), (), (), 1)
                 if self.request in readable:
@@ -278,6 +284,11 @@ class RelayHandler(socketserver.BaseRequestHandler):
                     if opcode == 9:
                         self._send_frame(10, datagram)
                         continue
+                    browser_to_native_count += 1
+                    if (self.server.drop_browser_to_native_every and
+                            browser_to_native_count % self.server.drop_browser_to_native_every == 0):
+                        self.server.record("browser_to_native_dropped", identity, datagram)
+                        continue
                     udp.send(datagram)
                     self.server.record("browser_to_native", identity, datagram)
                 if udp in readable:
@@ -285,6 +296,11 @@ class RelayHandler(socketserver.BaseRequestHandler):
                     if len(datagram) > self.server.max_datagram:
                         self._close(1009, "native datagram too large")
                         return
+                    native_to_browser_count += 1
+                    if (self.server.drop_native_to_browser_every and
+                            native_to_browser_count % self.server.drop_native_to_browser_every == 0):
+                        self.server.record("native_to_browser_dropped", identity, datagram)
+                        continue
                     self._send_frame(2, datagram)
                     self.server.record("native_to_browser", identity, datagram)
         finally:
@@ -371,6 +387,8 @@ def parse_args(argv=None):
     parser.add_argument("--tls-cert")
     parser.add_argument("--tls-key")
     parser.add_argument("--max-nonces", type=int, default=65536)
+    parser.add_argument("--drop-browser-to-native-every", type=int, default=0)
+    parser.add_argument("--drop-native-to-browser-every", type=int, default=0)
     parser.add_argument("--mint-ticket", action="store_true")
     parser.add_argument("--player")
     parser.add_argument("--session")
@@ -382,6 +400,12 @@ def main(argv=None):
     args = parse_args(argv)
     if args.max_datagram <= 0 or args.max_datagram > PROTOCOL_MAX_DATAGRAM:
         raise SystemExit("--max-datagram must be between 1 and 2048 bytes")
+    for option, value in (
+        ("--drop-browser-to-native-every", args.drop_browser_to_native_every),
+        ("--drop-native-to-browser-every", args.drop_native_to_browser_every),
+    ):
+        if value == 1 or value < 0:
+            raise SystemExit(option + " must be 0 or at least 2")
     secret_value = os.environ.get(args.secret_env)
     if not secret_value or len(secret_value) < 32:
         raise SystemExit(args.secret_env + " must contain at least 32 characters")
@@ -404,6 +428,8 @@ def main(argv=None):
         args.evidence,
         args.max_nonces,
         args.roster_dir,
+        args.drop_browser_to_native_every,
+        args.drop_native_to_browser_every,
     )
     if args.tls_cert or args.tls_key:
         if not args.tls_cert or not args.tls_key:

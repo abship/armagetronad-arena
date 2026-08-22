@@ -18,6 +18,20 @@ chmod 0777 "$runtime_dir/server" "$runtime_dir/evidence" "$runtime_dir/roster"
 
 export ARENA_RUNTIME_TAG=arena-native-runtime:ci
 export ARENA_RELAY_SECRET=ci-only-ephemeral-relay-secret-material
+shape_loss_every=${ARENA_SHAPE_LOSS_EVERY:-0}
+case "$shape_loss_every" in
+    0|*[!0-9]*) test "$shape_loss_every" = 0 || {
+        echo "ARENA_SHAPE_LOSS_EVERY must be 0 or an integer of at least 2" >&2
+        exit 1
+    } ;;
+    1) echo "ARENA_SHAPE_LOSS_EVERY must be 0 or an integer of at least 2" >&2; exit 1 ;;
+esac
+set --
+if test "$shape_loss_every" -ge 2; then
+    set -- \
+        --drop-browser-to-native-every "$shape_loss_every" \
+        --drop-native-to-browser-every "$shape_loss_every"
+fi
 
 cleanup() {
     docker logs arena-native >"$runtime_dir/evidence/native.log" 2>&1 || true
@@ -62,7 +76,11 @@ docker run -d \
     python3 arena/relay.py \
         --allow-origin http://127.0.0.1:8000 \
         --roster-dir /roster \
-        --evidence /evidence/relay.jsonl >/dev/null
+        --evidence /evidence/relay.jsonl \
+        "$@" >/dev/null
+
+printf '{"dropBrowserToNativeEvery":%s,"dropNativeToBrowserEvery":%s}\n' \
+    "$shape_loss_every" "$shape_loss_every" >"$runtime_dir/evidence/profile.json"
 
 for attempt in $(seq 1 30); do
     if docker run --rm --platform linux/amd64 --network host \
@@ -75,6 +93,35 @@ for attempt in $(seq 1 30); do
 done
 
 "$arena_dir/test-browser.sh" --browsers chrome,firefox
+
+python3 - "$runtime_dir/evidence/relay.jsonl" "$shape_loss_every" <<'PY'
+import collections
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+loss_every = int(sys.argv[2])
+directions = collections.Counter()
+sessions = {}
+for line in path.read_text(encoding="utf-8").splitlines():
+    entry = json.loads(line)
+    assert 0 <= entry["size"] <= 2048
+    directions[entry["direction"]] += 1
+    sessions.setdefault(entry["session"], collections.Counter())[entry["direction"]] += 1
+if loss_every:
+    for session in ("chrome-1v1", "firefox-1v1"):
+        assert sessions[session]["browser_to_native_dropped"] > 0
+        assert sessions[session]["native_to_browser_dropped"] > 0
+summary = {
+    session: dict(sorted(counts.items()))
+    for session, counts in sorted(sessions.items())
+}
+(path.parent / "shape-summary.json").write_text(
+    json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+)
+print(json.dumps(summary, sort_keys=True))
+PY
 
 docker stop -t 10 arena-native >/dev/null
 docker wait arena-native >/dev/null 2>&1 || true

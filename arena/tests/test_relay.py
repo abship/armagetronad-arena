@@ -5,6 +5,7 @@ Copyright (C) 2026 Arena contributors. GPLv2+; see COPYING.txt.
 """
 
 import importlib.util
+import json
 import os
 import socket
 import struct
@@ -160,6 +161,54 @@ class RelayTest(unittest.TestCase):
             self.assertEqual(payload, echoed)
         self.assertEqual(list(payloads), self.udp.messages[start:start + 2])
         connection.close()
+
+    def test_deterministic_loss_drops_only_selected_binary_datagrams(self):
+        with tempfile.TemporaryDirectory() as roster, tempfile.NamedTemporaryFile() as evidence:
+            udp = UDPRecorder()
+            server = RELAY.RelayServer(
+                ("127.0.0.1", 0), udp.address, self.secret, [ORIGIN], 64, 20,
+                evidence_path=evidence.name, max_nonces=16, roster_dir=roster,
+                drop_browser_to_native_every=2,
+                drop_native_to_browser_every=2,
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            original_server = self.server
+            self.server = server
+            try:
+                connection, response = self.connect(self.ticket("shaped-loss"))
+                self.assertIn(b"101 Switching Protocols", response)
+                send_frame(connection, b"first")
+                self.assertEqual((2, b"first"), receive_frame(connection))
+
+                for payload in (b"drop-upstream", b"drop-downstream"):
+                    send_frame(connection, payload)
+                    connection.settimeout(0.2)
+                    with self.assertRaises(socket.timeout):
+                        receive_frame(connection)
+                    connection.settimeout(2)
+                    send_frame(connection, b"alive", opcode=9)
+                    self.assertEqual((10, b"alive"), receive_frame(connection))
+
+                send_frame(connection, b"fourth-dropped")
+                connection.settimeout(0.2)
+                with self.assertRaises(socket.timeout):
+                    receive_frame(connection)
+                connection.settimeout(2)
+                send_frame(connection, b"fifth")
+                self.assertEqual((2, b"fifth"), receive_frame(connection))
+                connection.close()
+
+                with open(evidence.name, encoding="utf-8") as source:
+                    directions = [json.loads(line)["direction"] for line in source]
+                self.assertEqual(2, directions.count("browser_to_native_dropped"))
+                self.assertEqual(1, directions.count("native_to_browser_dropped"))
+            finally:
+                self.server = original_server
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=1)
+                udp.close()
 
     def test_missing_ticket_is_unauthorized(self):
         connection, response = self.connect()

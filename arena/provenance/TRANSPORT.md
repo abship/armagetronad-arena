@@ -35,5 +35,18 @@ The feasibility static server strips query strings from request logs. Browser
 failure diagnostics record only bounded, ticket-redacted state and screenshots;
 they never retain the credential-bearing startup URL.
 
+The Linux production-feasibility lane deterministically drops every 64th binary
+datagram independently in each direction after authentication and all size/rate
+validation. Dropped evidence retains only direction, identity, size, and digest.
+PING controls are never shaped, and delivered datagrams are never delayed,
+split, joined, reordered, or modified. Each real browser match must still pass
+the existing rendering, input, bidirectional-traffic, and native-result gates.
+
+The same harness arms bounded render-loop metrics only after both upstream
+cycles are live. Every client must retain at least 20 swap-gap samples, p95 at
+or below 250 ms, maximum gap at or below 750 ms, Wasm linear memory at or below
+256 MiB, and growth after arming at or below 32 MiB. These are stall/leak bounds,
+not a browser-process or GPU-memory claim.
+
 The Emscripten client bypasses the native interactive welcome/first-use UI and
 enters the Arena auto-connect seam directly. Native startup remains unchanged.

@@ -12,6 +12,7 @@ permissions:
 
 env:
   ARENA_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  ARENA_SHAPE_LOSS_EVERY: 64
 
 jobs:
   native-wasm-relay-1v1:

@@ -68,6 +68,26 @@ class SafariHelpersTest(unittest.TestCase):
             )
         self.assertEqual(2, state.call_count)
 
+    def test_frame_metric_thresholds(self):
+        summary = BROWSER.summarize_frame_metrics({
+            "gaps": list(range(1, 21)),
+            "initialHeapBytes": 64 * BROWSER.MIB,
+            "heapBytes": 80 * BROWSER.MIB,
+        })
+        self.assertEqual(19.0, summary["p95GapMs"])
+        self.assertTrue(BROWSER.frame_metrics_pass(summary))
+        for field, value in (
+            ("sampleCount", 19),
+            ("p95GapMs", 251),
+            ("maxGapMs", 751),
+            ("heapBytes", 257 * BROWSER.MIB),
+            ("heapGrowthBytes", 33 * BROWSER.MIB),
+        ):
+            rejected = dict(summary)
+            rejected[field] = value
+            with self.subTest(field=field):
+                self.assertFalse(BROWSER.frame_metrics_pass(rejected))
+
     def test_turn_reselects_frame_and_refinds_canvas(self):
         client = ("session", "safari2", 1)
         with mock.patch.object(BROWSER, "select_client", return_value="session") as select, \
