@@ -55,6 +55,15 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <fstream>
 #include <memory>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+
+EM_JS(void, sg_ArenaRecordPredictionCorrection, (), {
+    var record = Module['arenaRecordPredictionCorrection'];
+    if (record) record();
+});
+#endif
+
 #ifndef DEDICATED
 #define DONTDOIT
 #include "rRender.h"
@@ -5258,6 +5267,12 @@ void gCycle::SyncFromExtrapolator()
 
     // smooth position correction
     correctPosSmooth = correctPosSmooth + oldPos - pos;
+#ifdef __EMSCRIPTEN__
+    // Observe only the correction upstream already applied. Do not alter the
+    // prediction, reconciliation, smoothing, or movement values above.
+    if ( Owner() == sn_myNetID && ( oldPos - pos ).NormSquared() > 0 )
+        sg_ArenaRecordPredictionCorrection();
+#endif
 
 #ifdef DEBUG
     if ( correctPosSmooth.NormSquared() > .1f )

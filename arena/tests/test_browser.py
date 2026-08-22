@@ -302,6 +302,14 @@ def frame_metrics_pass(metrics):
     )
 
 
+def prediction_telemetry_pass(value):
+    if not isinstance(value, dict) or not isinstance(value.get("input"), dict):
+        return False
+    count = value["input"].get("predictionCorrections")
+    return (isinstance(count, int) and not isinstance(count, bool) and
+            0 <= count <= 0xffffffff)
+
+
 def browser_state(base, client):
     session = select_client(base, client)
     state = execute(
@@ -814,6 +822,7 @@ return document.querySelectorAll('iframe').length;
                     value["transport"].get("receivedDatagrams", 0) > 0 and
                     value.get("gl") and value["gl"].get("available") and
                     not value["gl"].get("lost") and
+                    prediction_telemetry_pass(value) and
                     value.get("frameMetrics") and
                     frame_metrics_pass(value["frameMetrics"]),
                 )
@@ -827,6 +836,7 @@ return document.querySelectorAll('iframe').length;
                         final_state["transport"].get("receivedDatagrams", 0) > 0 and
                         final_state.get("gl") and final_state["gl"].get("available") and
                         not final_state["gl"].get("lost") and
+                        prediction_telemetry_pass(final_state) and
                         final_state.get("frameMetrics") and
                         frame_metrics_pass(final_state["frameMetrics"])):
                     raise RuntimeError(player + " final result-bound state failed")

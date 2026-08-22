@@ -32,7 +32,8 @@ architecture=${platform#linux/}
 head=$(git -C "$repo_dir" rev-parse HEAD)
 tree=$(git -C "$repo_dir" rev-parse 'HEAD^{tree}')
 test "$(git -C "$repo_dir" rev-parse "$ARENA_SOURCE_TAG^{}")" = "$ARENA_SOURCE_COMMIT"
-git -C "$repo_dir" merge-base --is-ancestor "$ARENA_SOURCE_COMMIT" "$head"
+test "$(git -C "$repo_dir" rev-parse "$ARENA_PARENT_RELEASE_TAG^{}")" = "$ARENA_PARENT_RELEASE_COMMIT"
+git -C "$repo_dir" merge-base --is-ancestor "$ARENA_PARENT_RELEASE_COMMIT" "$head"
 test -z "$(git -C "$repo_dir" status --porcelain --untracked-files=all)" || {
     echo "source tree has tracked or untracked changes" >&2
     exit 1
@@ -97,6 +98,8 @@ source_archive_sha=$(awk '{print $1}' "$output_dir/$source_archive.sha256")
     printf 'source_tree=%s\n' "$tree"
     printf 'stable_tag=%s\n' "$ARENA_SOURCE_TAG"
     printf 'stable_commit=%s\n' "$ARENA_SOURCE_COMMIT"
+    printf 'parent_release_tag=%s\n' "$ARENA_PARENT_RELEASE_TAG"
+    printf 'parent_release_commit=%s\n' "$ARENA_PARENT_RELEASE_COMMIT"
     printf 'source_date_epoch=%s\n' "$ARENA_SOURCE_DATE_EPOCH"
     printf 'platform=%s\n' "$platform"
     printf 'source_archive=%s\n' "$source_archive"

@@ -105,6 +105,19 @@ class SafariHelpersTest(unittest.TestCase):
             with self.subTest(field=field):
                 self.assertFalse(BROWSER.frame_metrics_pass(rejected))
 
+    def test_prediction_correction_counter_is_bounded_and_typed(self):
+        self.assertTrue(BROWSER.prediction_telemetry_pass({
+            "input": {"predictionCorrections": 0},
+        }))
+        self.assertTrue(BROWSER.prediction_telemetry_pass({
+            "input": {"predictionCorrections": 0xffffffff},
+        }))
+        for value in (True, -1, 0x100000000, 1.5, "1", None):
+            with self.subTest(value=value):
+                self.assertFalse(BROWSER.prediction_telemetry_pass({
+                    "input": {"predictionCorrections": value},
+                }))
+
     def test_turn_reselects_frame_and_refinds_canvas(self):
         client = ("session", "safari2", 1)
         with mock.patch.object(BROWSER, "select_client", return_value="session") as select, \
