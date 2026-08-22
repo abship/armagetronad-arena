@@ -42,6 +42,8 @@ class ParityTests(unittest.TestCase):
                 PARITY.INPUT_SCHEDULE.encode("ascii")).hexdigest(),
             "nativeInput": {"role1KeyDown": 3, "role1KeyUp": 3,
                             "role1AcceptedTurns": 3, "role2AcceptedTurns": 0},
+            "nativeSetupInput": {"role1KeyDown": 3, "role1KeyUp": 3,
+                                 "role1AcceptedTurns": 3, "role2AcceptedTurns": 0},
             "rawSha256": raw,
             "browser": "chrome" if index % 2 == 0 else "firefox",
             "nativeCanonical": canonical,
@@ -60,22 +62,35 @@ class ParityTests(unittest.TestCase):
         for name in PARITY.RAW_PATHS:
             path = raw_dir / name
             path.parent.mkdir(parents=True, exist_ok=True)
-            if name == "native/input-role1.log":
+            if name in ("native/input-role1.log", "native/setup-input-role1.log"):
                 data = ("KEY 1 97 0 1\nKEY 0 97 0 1\nACTION CYCLE_TURN_LEFT 1 1 1\n") * 3
-            elif name == "native/input-role2.log":
+            elif name in ("native/input-role2.log", "native/setup-input-role2.log"):
                 data = ""
             elif name == "browser/states.json":
                 data = json.dumps([
-                    {"player": "role1", "finalState": {"input": {
-                        "keyDown": 3, "keyUp": 3, "sdlKeyDown": 3,
-                        "sdlKeyUp": 3, "acceptedActions": 3}}},
-                    {"player": "role2", "finalState": {"input": {
-                        "keyDown": 0, "keyUp": 0, "sdlKeyDown": 0,
-                        "sdlKeyUp": 0, "acceptedActions": 0}}},
+                    {"player": "role1",
+                     "setupInputState": {"input": {
+                         "keyDown": 3, "keyUp": 3, "sdlKeyDown": 3,
+                         "sdlKeyUp": 3, "acceptedActions": 3}},
+                     "finalState": {"input": {
+                         "keyDown": 3, "keyUp": 3, "sdlKeyDown": 3,
+                         "sdlKeyUp": 3, "acceptedActions": 3}}},
+                    {"player": "role2",
+                     "setupInputState": {"input": {
+                         "keyDown": 0, "keyUp": 0, "sdlKeyDown": 0,
+                         "sdlKeyUp": 0, "acceptedActions": 0}},
+                     "finalState": {"input": {
+                         "keyDown": 0, "keyUp": 0, "sdlKeyDown": 0,
+                         "sdlKeyUp": 0, "acceptedActions": 0}}},
                 ]) + "\n"
             elif name.endswith("ladderlog.txt"):
                 data = ("PLAYER_ENTERED role1 0.0.0.0\nPLAYER_ENTERED role2 0.0.0.0\n"
-                        "DEATH_SUICIDE role1\nMATCH_WINNER role2 10\nGAME_END 0\n")
+                        "NEW_MATCH setup\nDEATH_SUICIDE role1\n"
+                        "NEW_MATCH controlled\nDEATH_SUICIDE role1\n"
+                        "ROUND_WINNER role2 role2\nDEATH_SUICIDE role2\n"
+                        "MATCH_WINNER role2 10\nGAME_END 0\n")
+            elif name.endswith("server-console.log"):
+                data = "Resetting scores and starting new match after this round.\n"
             else:
                 data = name + "\n"
             path.write_text(data, encoding="ascii")
@@ -147,8 +162,9 @@ class ParityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = pathlib.Path(temporary) / "ladderlog.txt"
             path.write_text("PLAYER_ENTERED role1 x\nPLAYER_ENTERED role2 x\n"
-                            "PLAYER_ENTERED extra x\nDEATH_SUICIDE role1\n"
-                            "MATCH_WINNER role2 x\nGAME_END x\n")
+                            "PLAYER_ENTERED extra x\nNEW_MATCH setup\n"
+                            "NEW_MATCH controlled\nDEATH_SUICIDE role1\n"
+                            "ROUND_WINNER role2 x\nMATCH_WINNER role2 x\nGAME_END x\n")
             with self.assertRaisesRegex(ValueError, "exact 1v1"):
                 PARITY.authoritative_result(path)
 
@@ -156,8 +172,20 @@ class ParityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = pathlib.Path(temporary) / "ladderlog.txt"
             path.write_text("PLAYER_ENTERED role1 x\nPLAYER_ENTERED role2 x\n"
-                            "MATCH_WINNER role2 x\nDEATH_SUICIDE role1\nGAME_END x\n")
+                            "NEW_MATCH setup\nDEATH_SUICIDE role1\nNEW_MATCH controlled\n"
+                            "MATCH_WINNER role2 x\nDEATH_SUICIDE role1\n"
+                            "ROUND_WINNER role2 x\nGAME_END x\n")
             with self.assertRaisesRegex(ValueError, "event order"):
+                PARITY.authoritative_result(path)
+
+    def test_authoritative_result_rejects_unexpected_setup_result(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = pathlib.Path(temporary) / "ladderlog.txt"
+            path.write_text("PLAYER_ENTERED role1 x\nPLAYER_ENTERED role2 x\n"
+                            "NEW_MATCH setup\nDEATH_SUICIDE role2\n"
+                            "NEW_MATCH controlled\nDEATH_SUICIDE role1\n"
+                            "ROUND_WINNER role2 x\nMATCH_WINNER role2 x\nGAME_END x\n")
+            with self.assertRaisesRegex(ValueError, "setup result"):
                 PARITY.authoritative_result(path)
 
     def test_record_rejects_retry_and_schedule_drift(self):

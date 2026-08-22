@@ -12,9 +12,11 @@ import subprocess
 
 SCHEMA = "arena-native-browser-parity-v1"
 INPUT_SCHEMA = "arena-native-browser-parity-inputs-v1"
-EXPECTED_EVENTS = ["PLAYER_ENTERED", "PLAYER_ENTERED", "DEATH_SUICIDE",
+EXPECTED_EVENTS = ["NEW_MATCH", "DEATH_SUICIDE", "ROUND_WINNER",
                    "MATCH_WINNER", "GAME_END"]
-INPUT_SCHEDULE = "role1:wait(200ms),a(120ms),a(120ms),a(120ms);role2:none"
+INPUT_SCHEDULE = ("setup:start-new-match,wait(200ms),role1:a(120ms)x3;"
+                  "boundary:second-new-match,reset-input-evidence;"
+                  "measured:wait(200ms),role1:a(120ms)x3,role2:none")
 BUILD_PATHS = {
     "nativeClient": "build/native-parity/amd64/armagetronad",
     "nativeServer": "build/native/amd64/armagetronad-dedicated",
@@ -22,8 +24,10 @@ BUILD_PATHS = {
 }
 RAW_PATHS = {
     "native/ladderlog.txt", "native/match.aarec",
+    "native/server-console.log",
+    "native/setup-input-role1.log", "native/setup-input-role2.log",
     "native/input-role1.log", "native/input-role2.log",
-    "browser/ladderlog.txt", "browser/match.aarec",
+    "browser/ladderlog.txt", "browser/match.aarec", "browser/server-console.log",
     "browser/states.json", "browser/relay.jsonl",
 }
 
@@ -102,24 +106,61 @@ def native_input_counts(path):
 
 def authoritative_result(path):
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    entered = [(index, line.split()[1]) for index, line in enumerate(lines)
-               if line.startswith("PLAYER_ENTERED ")]
-    winners = [(index, line.split()[1]) for index, line in enumerate(lines)
-               if line.startswith("MATCH_WINNER ")]
-    suicides = [(index, line.split()[1]) for index, line in enumerate(lines)
-                if line.startswith("DEATH_SUICIDE ")]
-    game_ends = [index for index, line in enumerate(lines) if line.startswith("GAME_END ")]
-    if (sorted(player for _index, player in entered) != ["role1", "role2"] or
-            [player for _index, player in suicides] != ["role1"] or
-            [player for _index, player in winners] != ["role2"] or len(game_ends) != 1):
+    entered = [line.split()[1] for line in lines if line.startswith("PLAYER_ENTERED ")]
+    boundaries = [index for index, line in enumerate(lines) if line.startswith("NEW_MATCH ")]
+    if sorted(entered) != ["role1", "role2"] or len(boundaries) != 2:
         raise ValueError("authoritative exact 1v1 role2 result differs")
-    if not (max(index for index, _player in entered) < suicides[0][0] <
-            winners[0][0] < game_ends[0]):
+    setup = list(enumerate(lines[boundaries[0]:boundaries[1]], boundaries[0]))
+    setup_deaths = [(index, line.split()[0], line.split()[1]) for index, line in setup
+                    if line.startswith("DEATH_")]
+    setup_round_winners = [(index, line.split()[1]) for index, line in setup
+                           if line.startswith("ROUND_WINNER ")]
+    setup_match_winners = [(index, line.split()[1]) for index, line in setup
+                           if line.startswith("MATCH_WINNER ")]
+    if (not setup_deaths or setup_deaths[0][1:] != ("DEATH_SUICIDE", "role1") or
+            len(setup_deaths) > 2 or
+            any(event != "DEATH_SUICIDE" or player != "role2"
+                for _index, event, player in setup_deaths[1:]) or
+            len(setup_round_winners) > 1 or
+            any(player != "role2" for _index, player in setup_round_winners) or
+            len(setup_match_winners) > 1 or
+            any(player != "role2" for _index, player in setup_match_winners)):
+        raise ValueError("authoritative setup result differs")
+    if setup_round_winners and not setup_deaths[0][0] < setup_round_winners[0][0]:
+        raise ValueError("authoritative setup event order differs")
+    if setup_deaths[1:] and (not setup_round_winners or
+            not setup_round_winners[0][0] < setup_deaths[1][0]):
+        raise ValueError("authoritative setup cleanup order differs")
+    if setup_match_winners and (not setup_round_winners or
+            not setup_round_winners[0][0] < setup_match_winners[0][0]):
+        raise ValueError("authoritative setup winner order differs")
+    segment = list(enumerate(lines[boundaries[1]:], boundaries[1]))
+    deaths = [(index, line.split()[0], line.split()[1]) for index, line in segment
+              if line.startswith("DEATH_")]
+    round_winners = [(index, line.split()[1]) for index, line in segment
+                     if line.startswith("ROUND_WINNER ")]
+    match_winners = [(index, line.split()[1]) for index, line in segment
+                     if line.startswith("MATCH_WINNER ")]
+    game_ends = [index for index, line in segment if line.startswith("GAME_END ")]
+    if (not deaths or deaths[0][1:] != ("DEATH_SUICIDE", "role1") or
+            len(round_winners) != 1 or round_winners[0][1] != "role2" or
+            len(match_winners) != 1 or match_winners[0][1] != "role2" or
+            len(game_ends) != 1):
+        raise ValueError("authoritative exact 1v1 role2 result differs")
+    cleanup_deaths = deaths[1:]
+    if (len(cleanup_deaths) > 1 or
+            any(event != "DEATH_SUICIDE" or player != "role2"
+                for _index, event, player in cleanup_deaths)):
+        raise ValueError("authoritative exact 1v1 cleanup differs")
+    if not (boundaries[1] < deaths[0][0] < round_winners[0][0] <
+            match_winners[0][0] < game_ends[0]):
         raise ValueError("authoritative exact 1v1 event order differs")
+    if cleanup_deaths and not (round_winners[0][0] < cleanup_deaths[0][0] < game_ends[0]):
+        raise ValueError("authoritative exact 1v1 cleanup order differs")
     return {"events": EXPECTED_EVENTS, "loser": "role1", "winner": "role2"}
 
 
-def browser_input_counts(path):
+def browser_input_counts(path, state_field):
     try:
         states = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as error:
@@ -131,7 +172,7 @@ def browser_input_counts(path):
         raise ValueError("browser state identity set differs")
     result = {}
     for player, state in by_player.items():
-        inputs = state.get("finalState", {}).get("input", {})
+        inputs = state.get(state_field, {}).get("input", {})
         result[player] = {
             "keyDown": inputs.get("keyDown"), "keyUp": inputs.get("keyUp"),
             "sdlKeyDown": inputs.get("sdlKeyDown"), "sdlKeyUp": inputs.get("sdlKeyUp"),
@@ -175,6 +216,10 @@ def validate_record(record, index, source_commit=None, input_manifest=None):
             "role1KeyDown": 3, "role1KeyUp": 3,
             "role1AcceptedTurns": 3, "role2AcceptedTurns": 0}:
         raise ValueError("trial {0}: native accepted input proof differs".format(index))
+    if record.get("nativeSetupInput") != {
+            "role1KeyDown": 3, "role1KeyUp": 3,
+            "role1AcceptedTurns": 3, "role2AcceptedTurns": 0}:
+        raise ValueError("trial {0}: native setup input proof differs".format(index))
     raw_digests = record.get("rawSha256")
     if not isinstance(raw_digests, dict) or set(raw_digests) != RAW_PATHS:
         raise ValueError("trial {0}: raw evidence set differs".format(index))
@@ -236,13 +281,32 @@ def verify(evidence_dir, indices, source_commit=None, input_manifest=None):
         if role1 != {"keyDown": 3, "keyUp": 3, "acceptedTurns": 3} or \
                 role2 != {"keyDown": 0, "keyUp": 0, "acceptedTurns": 0}:
             raise ValueError("trial {0}: raw native input proof differs".format(index))
-        browser_inputs = browser_input_counts(raw_dir / "browser/states.json")
+        setup_role1 = native_input_counts(raw_dir / "native/setup-input-role1.log")
+        setup_role2 = native_input_counts(raw_dir / "native/setup-input-role2.log")
+        if setup_role1 != {"keyDown": 3, "keyUp": 3, "acceptedTurns": 3} or \
+                setup_role2 != {"keyDown": 0, "keyUp": 0, "acceptedTurns": 0}:
+            raise ValueError("trial {0}: raw native setup input proof differs".format(index))
+        browser_inputs = browser_input_counts(raw_dir / "browser/states.json", "finalState")
         if browser_inputs != {
                 "role1": {"keyDown": 3, "keyUp": 3, "sdlKeyDown": 3,
                           "sdlKeyUp": 3, "acceptedTurns": 3},
                 "role2": {"keyDown": 0, "keyUp": 0, "sdlKeyDown": 0,
                           "sdlKeyUp": 0, "acceptedTurns": 0}}:
             raise ValueError("trial {0}: raw browser input proof differs".format(index))
+        browser_setup_inputs = browser_input_counts(
+            raw_dir / "browser/states.json", "setupInputState")
+        if browser_setup_inputs != {
+                "role1": {"keyDown": 3, "keyUp": 3, "sdlKeyDown": 3,
+                          "sdlKeyUp": 3, "acceptedTurns": 3},
+                "role2": {"keyDown": 0, "keyUp": 0, "sdlKeyDown": 0,
+                          "sdlKeyUp": 0, "acceptedTurns": 0}}:
+            raise ValueError("trial {0}: raw browser setup input proof differs".format(index))
+        for arm in ("native", "browser"):
+            console = (raw_dir / arm / "server-console.log").read_text(
+                encoding="utf-8", errors="replace")
+            if console.count("Resetting scores and starting new match after this round") != 1:
+                raise ValueError("trial {0}: {1} reset acknowledgement differs".format(
+                    index, arm))
         for arm, field in (("native", "nativeCanonical"), ("browser", "browserCanonical")):
             try:
                 result = authoritative_result(raw_dir / arm / "ladderlog.txt")

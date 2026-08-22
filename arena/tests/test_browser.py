@@ -12,6 +12,7 @@ import json
 import math
 import os
 import pathlib
+import stat
 import re
 import struct
 import time
@@ -379,6 +380,44 @@ return true;
     )
 
 
+def reset_input_evidence(base, client):
+    session = select_client(base, client)
+    return execute(
+        base,
+        session,
+        """
+var status = Module['arenaInputStatus'];
+if (!status) return false;
+for (var key of ['keyDown', 'keyUp', 'sdlKeyDown', 'sdlKeyUp',
+                 'acceptedActions', 'playerActions']) status[key] = 0;
+status['lastKey'] = '';
+status['lastCode'] = '';
+status['lastKeyCode'] = 0;
+status['lastSDLKey'] = 0;
+status['lastSDLBound'] = false;
+status['lastAction'] = '';
+status['lastActionValue'] = 0;
+status['lastActionPlayer'] = 0;
+status['lastActionAccepted'] = false;
+return true;
+""",
+    )
+
+
+def send_server_command(path, command):
+    if command not in ("START_NEW_MATCH", "QUIT"):
+        raise ValueError("unsupported parity server command")
+    if not stat.S_ISFIFO(path.stat().st_mode):
+        raise RuntimeError("parity server control is not a FIFO")
+    payload = (command + "\n").encode("ascii")
+    descriptor = os.open(str(path), os.O_WRONLY | os.O_NONBLOCK)
+    try:
+        if os.write(descriptor, payload) != len(payload):
+            raise RuntimeError("short parity server command write")
+    finally:
+        os.close(descriptor)
+
+
 def wait_for(predicate, timeout, description):
     deadline = time.monotonic() + timeout
     last = None
@@ -427,10 +466,15 @@ def main():
     parser.add_argument("--client-url", default="http://127.0.0.1:8000/armagetronad_main.html")
     parser.add_argument("--relay-url", default="ws://127.0.0.1:8765")
     parser.add_argument("--server-log", required=True)
+    parser.add_argument("--server-console", type=pathlib.Path)
+    parser.add_argument("--server-control", type=pathlib.Path)
     parser.add_argument("--evidence-dir", required=True)
     parser.add_argument("--timeout", type=int, default=150)
     parser.add_argument("--parity-role-schedule", action="store_true")
     args = parser.parse_args()
+    if ((args.parity_role_schedule and not (args.server_control and args.server_console)) or
+            (not args.parity_role_schedule and (args.server_control or args.server_console))):
+        parser.error("--parity-role-schedule requires --server-control/--server-console and vice versa")
 
     secret_value = os.environ.get("ARENA_RELAY_SECRET", "")
     if len(secret_value) < 32:
@@ -442,6 +486,7 @@ def main():
     initial_log_size = server_log.stat().st_size if server_log.exists() else 0
     sessions = []
     evidence = []
+    parity_boundary_new_match = None
 
     try:
         def make_client_url(number):
@@ -606,6 +651,56 @@ return document.querySelectorAll('iframe').length;
         live_states = wait_for(
             both_players_live, 60, "both live controlled upstream cycles"
         )
+        if args.parity_role_schedule:
+            baseline_new_matches = sum(
+                line.startswith("NEW_MATCH ") for line in server_result().splitlines()
+            )
+            if baseline_new_matches != 1:
+                raise RuntimeError("setup round NEW_MATCH count is not exact")
+            send_server_command(args.server_control, "START_NEW_MATCH")
+            wait_for(
+                lambda: args.server_console.exists() and
+                "Resetting scores and starting new match after this round" in
+                args.server_console.read_text(encoding="utf-8", errors="replace"),
+                15,
+                "START_NEW_MATCH server acknowledgement",
+            )
+            time.sleep(0.20)
+            send_client_turn(args.webdriver_url, sessions[0], "a")
+            send_client_turn(args.webdriver_url, sessions[0], "a")
+            send_client_turn(args.webdriver_url, sessions[0], "a")
+            setup_states = []
+            for index, client in enumerate(sessions):
+                expected = 3 if index == 0 else 0
+                setup_states.append(wait_for_state(
+                    args.webdriver_url, client, 15,
+                    client[1] + " exact setup controls",
+                    lambda value, expected=expected: value.get("input") and
+                    value["input"].get("keyDown", 0) == expected and
+                    value["input"].get("keyUp", 0) == expected and
+                    value["input"].get("sdlKeyDown", 0) == expected and
+                    value["input"].get("sdlKeyUp", 0) == expected and
+                    value["input"].get("acceptedActions", 0) == expected,
+                ))
+            wait_for(
+                lambda: server_result() if sum(
+                    line.startswith("NEW_MATCH ")
+                    for line in server_result().splitlines()
+                ) > baseline_new_matches else None,
+                45,
+                "post-admission NEW_MATCH boundary",
+            )
+            parity_boundary_new_match = baseline_new_matches + 1
+            live_states = wait_for(
+                both_players_live, 60, "both cycles live after setup boundary"
+            )
+            for index, client in enumerate(sessions):
+                evidence[index]["setupInputState"] = setup_states[index]
+                if not reset_input_evidence(args.webdriver_url, client):
+                    raise RuntimeError("browser input evidence reset failed")
+            live_states = wait_for(
+                both_players_live, 15, "both controlled cycles after evidence reset"
+            )
         for index, state in enumerate(live_states):
             evidence[index]["preActionState"] = state
 
@@ -679,32 +774,57 @@ return document.querySelectorAll('iframe').length;
                 any("PLAYER_ENTERED" in line and player in line for line in lines)
                 for player in players
             )
+            result_lines = lines
+            if args.parity_role_schedule:
+                boundaries = [index for index, line in enumerate(lines)
+                              if line.startswith("NEW_MATCH ")]
+                if len(boundaries) < parity_boundary_new_match:
+                    return None
+                result_lines = lines[boundaries[parity_boundary_new_match - 1]:]
             finished = any(
                 "MATCH_WINNER" in line and
                 ((args.parity_role_schedule and "role2" in line) or
                  (not args.parity_role_schedule and any(player in line for player in players)))
-                for line in lines
+                for line in result_lines
             )
             return text if entered and finished else None
 
         result = wait_for(authoritative_result, args.timeout, "authoritative live-client 1v1 winner")
         (evidence_dir / (args.browser + "-result.log")).write_text(result, encoding="utf-8")
+        winner_states = None
+        if args.parity_role_schedule:
+            winner_states = [browser_state(args.webdriver_url, client) for client in sessions]
+            send_server_command(args.server_control, "QUIT")
         for index, client in enumerate(sessions):
             _session, player, _frame = client
-            final_state = wait_for_state(
-                args.webdriver_url, client,
-                15,
-                player + " bidirectional datagram traffic",
-                lambda value: value.get("transport") and
-                value["transport"].get("open", 0) >= 1 and
-                value["transport"].get("failed", 0) == 0 and
-                value["transport"].get("sentDatagrams", 0) > 0 and
-                value["transport"].get("receivedDatagrams", 0) > 0 and
-                value.get("gl") and value["gl"].get("available") and
-                not value["gl"].get("lost") and
-                value.get("frameMetrics") and
-                frame_metrics_pass(value["frameMetrics"]),
-            )
+            if winner_states is None:
+                final_state = wait_for_state(
+                    args.webdriver_url, client,
+                    15,
+                    player + " bidirectional datagram traffic",
+                    lambda value: value.get("transport") and
+                    value["transport"].get("open", 0) >= 1 and
+                    value["transport"].get("failed", 0) == 0 and
+                    value["transport"].get("sentDatagrams", 0) > 0 and
+                    value["transport"].get("receivedDatagrams", 0) > 0 and
+                    value.get("gl") and value["gl"].get("available") and
+                    not value["gl"].get("lost") and
+                    value.get("frameMetrics") and
+                    frame_metrics_pass(value["frameMetrics"]),
+                )
+            else:
+                final_state = winner_states[index]
+                if not (isinstance(final_state, dict) and
+                        final_state.get("transport") and
+                        final_state["transport"].get("open", 0) >= 1 and
+                        final_state["transport"].get("failed", 0) == 0 and
+                        final_state["transport"].get("sentDatagrams", 0) > 0 and
+                        final_state["transport"].get("receivedDatagrams", 0) > 0 and
+                        final_state.get("gl") and final_state["gl"].get("available") and
+                        not final_state["gl"].get("lost") and
+                        final_state.get("frameMetrics") and
+                        frame_metrics_pass(final_state["frameMetrics"])):
+                    raise RuntimeError(player + " final result-bound state failed")
             evidence[index]["finalState"] = final_state
         (evidence_dir / (args.browser + "-states.json")).write_text(
             json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"

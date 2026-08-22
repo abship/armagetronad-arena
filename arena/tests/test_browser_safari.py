@@ -2,7 +2,9 @@
 """Small Safari WebDriver helpers checks."""
 
 import importlib.util
+import os
 import pathlib
+import tempfile
 import unittest
 from unittest import mock
 
@@ -112,6 +114,29 @@ class SafariHelpersTest(unittest.TestCase):
         select.assert_called_once_with("http://driver", client)
         find.assert_called_once_with("http://driver", "session", "#canvas")
         send.assert_called_once_with("http://driver", "session", "fresh-canvas", "d")
+
+    def test_resets_only_browser_input_evidence(self):
+        client = ("session", "role1", None)
+        with mock.patch.object(BROWSER, "select_client", return_value="session") as select, \
+             mock.patch.object(BROWSER, "execute", return_value=True) as execute:
+            self.assertTrue(BROWSER.reset_input_evidence("http://driver", client))
+        select.assert_called_once_with("http://driver", client)
+        self.assertIn("acceptedActions", execute.call_args.args[2])
+
+    def test_server_command_requires_fifo_and_writes_atomically(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = pathlib.Path(temporary) / "control"
+            os.mkfifo(path)
+            reader = os.open(str(path), os.O_RDONLY | os.O_NONBLOCK)
+            try:
+                BROWSER.send_server_command(path, "START_NEW_MATCH")
+                self.assertEqual(b"START_NEW_MATCH\n", os.read(reader, 128))
+            finally:
+                os.close(reader)
+            path.unlink()
+            path.write_text("not a fifo", encoding="ascii")
+            with self.assertRaisesRegex(RuntimeError, "not a FIFO"):
+                BROWSER.send_server_command(path, "QUIT")
 
 
 if __name__ == "__main__":

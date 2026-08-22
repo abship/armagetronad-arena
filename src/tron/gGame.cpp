@@ -100,18 +100,24 @@ EM_JS( void, sg_ArenaSetLocalObjectStatus,
 #elif defined(ARENA_NATIVE_PARITY)
 static void sg_ArenaSetLocalObjectStatus( int, int, int alive )
 {
-    static bool readyWritten = false;
-    if ( readyWritten || !alive )
+    static bool wasAlive = false;
+    static unsigned int readyEpoch = 0;
+    if ( !alive )
+    {
+        wasAlive = false;
         return;
+    }
+    if ( wasAlive )
+        return;
+    wasAlive = true;
     char const * path = getenv( "ARENA_PARITY_INPUT_EVIDENCE" );
     if ( !path || !path[0] )
         return;
     FILE * output = fopen( path, "a" );
     if ( !output )
         return;
-    fprintf( output, "READY\n" );
+    fprintf( output, "READY %u\n", ++readyEpoch );
     fclose( output );
-    readyWritten = true;
 }
 #endif
 

@@ -22,6 +22,8 @@ source_commit=$(git -C "$repo_dir" rev-parse HEAD)
 python3 "$arena_dir/parity.py" --verify-input-manifest "$ARENA_PARITY_INPUT_MANIFEST" \
     --source-commit "$source_commit"
 current_index=
+server_cli_pid=
+server_input=
 
 cleanup() {
     status=$?
@@ -50,6 +52,15 @@ cleanup() {
         "arena-parity-static-$current_index" \
         "arena-parity-relay-$current_index" \
         "arena-parity-webdriver-$current_index" >/dev/null 2>&1 || true
+    if test -n "$server_input"; then
+        exec 3>&- || true
+        rm -f "$server_input"
+        server_input=
+    fi
+    if test -n "$server_cli_pid"; then
+        wait "$server_cli_pid" >/dev/null 2>&1 || true
+        server_cli_pid=
+    fi
     return "$status"
 }
 trap cleanup EXIT HUP INT TERM
@@ -65,6 +76,51 @@ wait_log() {
     return 1
 }
 
+wait_log_count() {
+    log=$1 pattern=$2 expected=$3
+    for attempt in $(seq 1 180); do
+        count=0
+        test ! -f "$log" || count=$(grep -c "$pattern" "$log" || true)
+        test "$count" -ge "$expected" && return 0
+        sleep 0.25
+    done
+    echo "timed out waiting for $expected occurrences of $pattern in $log" >&2
+    test ! -f "$log" || tail -n 100 "$log" >&2
+    return 1
+}
+
+wait_server_exit() {
+    name=$1
+    exited=false
+    for attempt in $(seq 1 120); do
+        if ! docker container inspect "$name" >/dev/null 2>&1; then
+            exited=true
+            break
+        fi
+        sleep 0.25
+    done
+    test "$exited" = true || {
+        echo "$name did not exit after upstream QUIT" >&2
+        return 1
+    }
+    wait "$server_cli_pid"
+    server_cli_pid=
+    exec 3>&-
+    rm -f "$server_input"
+    server_input=
+}
+
+wait_container_running() {
+    name=$1
+    for attempt in $(seq 1 120); do
+        docker container inspect -f '{{.State.Running}}' "$name" 2>/dev/null | grep -q '^true$' && return 0
+        test -z "$server_cli_pid" || kill -0 "$server_cli_pid" 2>/dev/null || break
+        sleep 0.25
+    done
+    echo "$name did not start" >&2
+    return 1
+}
+
 write_record() {
     index=$1 browser=$2 native_dir=$3 browser_dir=$4
     native_log=$native_dir/server/ladderlog.txt
@@ -75,16 +131,23 @@ write_record() {
     mkdir -p "$raw_dir/native" "$raw_dir/browser"
     cp "$native_log" "$raw_dir/native/ladderlog.txt"
     cp "$native_rec" "$raw_dir/native/match.aarec"
+    cp "$native_dir/server-console.log" "$raw_dir/native/server-console.log"
     cp "$browser_log" "$raw_dir/browser/ladderlog.txt"
     cp "$browser_rec" "$raw_dir/browser/match.aarec"
+    cp "$browser_dir/server-console.log" "$raw_dir/browser/server-console.log"
     cp "$browser_dir/evidence/$browser-states.json" "$raw_dir/browser/states.json"
     cp "$browser_dir/evidence/relay.jsonl" "$raw_dir/browser/relay.jsonl"
+    cp "$native_dir/role1/setup-input-evidence.log" "$raw_dir/native/setup-input-role1.log"
+    cp "$native_dir/role2/setup-input-evidence.log" "$raw_dir/native/setup-input-role2.log"
     cp "$native_dir/role1/input-evidence.log" "$raw_dir/native/input-role1.log"
     cp "$native_dir/role2/input-evidence.log" "$raw_dir/native/input-role2.log"
     python3 - "$evidence_dir/trials/trial-$(printf %03d "$index").json" \
         "$index" "$browser" "$source_commit" "$ARENA_PARITY_INPUT_MANIFEST" \
         "$raw_dir/native/ladderlog.txt" "$raw_dir/native/match.aarec" \
+        "$raw_dir/native/server-console.log" \
         "$raw_dir/browser/ladderlog.txt" "$raw_dir/browser/match.aarec" \
+        "$raw_dir/browser/server-console.log" \
+        "$raw_dir/native/setup-input-role1.log" "$raw_dir/native/setup-input-role2.log" \
         "$raw_dir/native/input-role1.log" "$raw_dir/native/input-role2.log" \
         "$raw_dir/browser/states.json" "$raw_dir/browser/relay.jsonl" <<'PY'
 import json, pathlib, sys
@@ -93,22 +156,57 @@ index = int(sys.argv[2])
 
 def canonical(log_path):
     lines = pathlib.Path(log_path).read_text(encoding="utf-8", errors="replace").splitlines()
-    entered = [(index, line.split()[1]) for index, line in enumerate(lines)
-               if line.startswith("PLAYER_ENTERED ")]
-    winners = [(index, line.split()[1]) for index, line in enumerate(lines)
-               if line.startswith("MATCH_WINNER ")]
-    suicides = [(index, line.split()[1]) for index, line in enumerate(lines)
-                if line.startswith("DEATH_SUICIDE ")]
-    game_ends = [index for index, line in enumerate(lines) if line.startswith("GAME_END ")]
-    if sorted(player for _index, player in entered) != ["role1", "role2"]:
-        raise SystemExit("authoritative PLAYER_ENTERED set is not exact")
-    if ([player for _index, player in suicides] != ["role1"] or
-            [player for _index, player in winners] != ["role2"] or len(game_ends) != 1):
-        raise SystemExit("authoritative role2 winner/GAME_END is not exact")
-    if not (max(index for index, _player in entered) < suicides[0][0] <
-            winners[0][0] < game_ends[0]):
-        raise SystemExit("authoritative event order is not exact")
-    return {"events": ["PLAYER_ENTERED", "PLAYER_ENTERED", "DEATH_SUICIDE",
+    entered = [line.split()[1] for line in lines if line.startswith("PLAYER_ENTERED ")]
+    boundaries = [index for index, line in enumerate(lines) if line.startswith("NEW_MATCH ")]
+    if sorted(entered) != ["role1", "role2"] or len(boundaries) != 2:
+        raise SystemExit("authoritative entry/boundary set is not exact")
+    setup = list(enumerate(lines[boundaries[0]:boundaries[1]], boundaries[0]))
+    setup_deaths = [(index, line.split()[0], line.split()[1]) for index, line in setup
+                    if line.startswith("DEATH_")]
+    setup_round_winners = [(index, line.split()[1]) for index, line in setup
+                           if line.startswith("ROUND_WINNER ")]
+    setup_match_winners = [(index, line.split()[1]) for index, line in setup
+                           if line.startswith("MATCH_WINNER ")]
+    if (not setup_deaths or setup_deaths[0][1:] != ("DEATH_SUICIDE", "role1") or
+            len(setup_deaths) > 2 or
+            any(event != "DEATH_SUICIDE" or player != "role2"
+                for _index, event, player in setup_deaths[1:]) or
+            len(setup_round_winners) > 1 or
+            any(player != "role2" for _index, player in setup_round_winners) or
+            len(setup_match_winners) > 1 or
+            any(player != "role2" for _index, player in setup_match_winners)):
+        raise SystemExit("authoritative setup result is not exact")
+    if setup_round_winners and not setup_deaths[0][0] < setup_round_winners[0][0]:
+        raise SystemExit("authoritative setup event order is not exact")
+    if setup_deaths[1:] and (not setup_round_winners or
+            not setup_round_winners[0][0] < setup_deaths[1][0]):
+        raise SystemExit("authoritative setup cleanup order is not exact")
+    if setup_match_winners and (not setup_round_winners or
+            not setup_round_winners[0][0] < setup_match_winners[0][0]):
+        raise SystemExit("authoritative setup winner order is not exact")
+    segment = list(enumerate(lines[boundaries[1]:], boundaries[1]))
+    deaths = [(index, line.split()[0], line.split()[1]) for index, line in segment
+              if line.startswith("DEATH_")]
+    round_winners = [(index, line.split()[1]) for index, line in segment
+                     if line.startswith("ROUND_WINNER ")]
+    match_winners = [(index, line.split()[1]) for index, line in segment
+                     if line.startswith("MATCH_WINNER ")]
+    game_ends = [index for index, line in segment if line.startswith("GAME_END ")]
+    if (not deaths or deaths[0][1:] != ("DEATH_SUICIDE", "role1") or
+            len(round_winners) != 1 or round_winners[0][1] != "role2" or
+            len(match_winners) != 1 or match_winners[0][1] != "role2" or
+            len(game_ends) != 1):
+        raise SystemExit("authoritative controlled role2 result is not exact")
+    cleanup = deaths[1:]
+    if (len(cleanup) > 1 or any(event != "DEATH_SUICIDE" or player != "role2"
+                                for _index, event, player in cleanup)):
+        raise SystemExit("authoritative cleanup death set is not exact")
+    if not (boundaries[1] < deaths[0][0] < round_winners[0][0] <
+            match_winners[0][0] < game_ends[0]):
+        raise SystemExit("authoritative controlled event order is not exact")
+    if cleanup and not (round_winners[0][0] < cleanup[0][0] < game_ends[0]):
+        raise SystemExit("authoritative cleanup event order is not exact")
+    return {"events": ["NEW_MATCH", "DEATH_SUICIDE", "ROUND_WINNER",
                        "MATCH_WINNER", "GAME_END"],
             "loser": "role1", "winner": "role2"}
 
@@ -121,17 +219,22 @@ def digest(file_name):
     return value.hexdigest()
 
 manifest = json.loads(pathlib.Path(sys.argv[5]).read_text(encoding="utf-8"))
-native_log, native_recording = sys.argv[6], sys.argv[7]
-browser_log, browser_recording = sys.argv[8], sys.argv[9]
-native_input1, native_input2 = sys.argv[10], sys.argv[11]
-browser_states, browser_relay = sys.argv[12], sys.argv[13]
+native_log, native_recording, native_console = sys.argv[6], sys.argv[7], sys.argv[8]
+browser_log, browser_recording, browser_console = sys.argv[9], sys.argv[10], sys.argv[11]
+native_setup1, native_setup2 = sys.argv[12], sys.argv[13]
+native_input1, native_input2 = sys.argv[14], sys.argv[15]
+browser_states, browser_relay = sys.argv[16], sys.argv[17]
 raw = {
     "native/ladderlog.txt": native_log,
     "native/match.aarec": native_recording,
+    "native/server-console.log": native_console,
     "native/input-role1.log": native_input1,
     "native/input-role2.log": native_input2,
+    "native/setup-input-role1.log": native_setup1,
+    "native/setup-input-role2.log": native_setup2,
     "browser/ladderlog.txt": browser_log,
     "browser/match.aarec": browser_recording,
+    "browser/server-console.log": browser_console,
     "browser/states.json": browser_states,
     "browser/relay.jsonl": browser_relay,
 }
@@ -144,6 +247,8 @@ record = {"schema": "arena-native-browser-parity-v1", "trial": index,
           "inputScheduleSha256": manifest["inputScheduleSha256"],
           "nativeInput": {"role1KeyDown": 3, "role1KeyUp": 3,
                           "role1AcceptedTurns": 3, "role2AcceptedTurns": 0},
+          "nativeSetupInput": {"role1KeyDown": 3, "role1KeyUp": 3,
+                               "role1AcceptedTurns": 3, "role2AcceptedTurns": 0},
           "rawSha256": {name: digest(path) for name, path in raw.items()},
           "nativeCanonical": canonical(native_log),
           "browserCanonical": canonical(browser_log),
@@ -166,14 +271,20 @@ run_native() {
         printf '%s\n' "PLAYER_1 role$role" >>"$dir/role$role/user.cfg"
         : >"$dir/role$role/input-evidence.log"
     done
-    docker run -d --name "arena-parity-native-server-$index" --network host \
+    server_input=$dir/server-input
+    rm -f "$server_input"
+    mkfifo "$server_input"
+    exec 3<>"$server_input"
+    docker run --rm -i --name "arena-parity-native-server-$index" --network host \
         -v "$dir/server:/arena/var" \
         -v "$arena_dir/config/parity-server.cfg:/arena/data/config/parity-server.cfg:ro" \
         arena-native-runtime:parity \
         --datadir /arena/data --configdir /arena/data/config --userconfigdir /arena/var \
         --vardir /arena/var --resourcedir /arena/data/resource \
         --autoresourcedir /arena/var/resource-cache --record /arena/var/match.aarec \
-        --extraconfig parity-server.cfg >/dev/null
+        --extraconfig parity-server.cfg <"$server_input" >"$dir/server-console.log" 2>&1 &
+    server_cli_pid=$!
+    wait_container_running "arena-parity-native-server-$index"
     for role in 1 2; do
         display=:$((98 + role))
         docker run -d --name "arena-parity-native-role$role-$index" --network host --entrypoint /bin/sh \
@@ -185,8 +296,30 @@ run_native() {
     done
     wait_log "$dir/server/ladderlog.txt" '^PLAYER_ENTERED role1'
     wait_log "$dir/server/ladderlog.txt" '^PLAYER_ENTERED role2'
-    wait_log "$dir/role1/input-evidence.log" '^READY$'
-    wait_log "$dir/role2/input-evidence.log" '^READY$'
+    wait_log "$dir/role1/input-evidence.log" '^READY 1$'
+    wait_log "$dir/role2/input-evidence.log" '^READY 1$'
+    test "$(grep -c '^NEW_MATCH ' "$dir/server/ladderlog.txt")" -eq 1 || {
+        echo "native setup NEW_MATCH count is not exact" >&2
+        return 1
+    }
+    printf 'START_NEW_MATCH\n' >&3
+    wait_log "$dir/server-console.log" 'Resetting scores and starting new match after this round'
+    sleep 0.20
+    docker exec "arena-parity-native-role1-$index" sh -ec '
+        window=$(xdotool search --onlyvisible --name Armagetron | head -n 1)
+        xdotool windowfocus "$window"
+        xdotool keydown a; sleep 0.12; xdotool keyup a
+        xdotool keydown a; sleep 0.12; xdotool keyup a
+        xdotool keydown a; sleep 0.12; xdotool keyup a
+    '
+    wait_log_count "$dir/server/ladderlog.txt" '^NEW_MATCH ' 2
+    wait_log "$dir/role1/input-evidence.log" '^READY 2$'
+    wait_log "$dir/role2/input-evidence.log" '^READY 2$'
+    cp "$dir/role1/input-evidence.log" "$dir/role1/setup-input-evidence.log"
+    cp "$dir/role2/input-evidence.log" "$dir/role2/setup-input-evidence.log"
+    : >"$dir/role1/input-evidence.log"
+    : >"$dir/role2/input-evidence.log"
+    winner_count=$(grep -c 'MATCH_WINNER.*role2' "$dir/server/ladderlog.txt" || true)
     sleep 0.20
     docker exec "arena-parity-native-role1-$index" sh -ec '
         window=$(xdotool search --onlyvisible --name Armagetron | head -n 1)
@@ -215,9 +348,11 @@ while time.monotonic() < deadline:
 else:
     raise SystemExit("native SDL/accepted-action evidence is not exact")
 PY
-    wait_log "$dir/server/ladderlog.txt" 'MATCH_WINNER.*role2'
-    docker stop -t 10 "arena-parity-native-role1-$index" "arena-parity-native-role2-$index" "arena-parity-native-server-$index" >/dev/null
-    docker rm -f "arena-parity-native-role1-$index" "arena-parity-native-role2-$index" "arena-parity-native-server-$index" >/dev/null
+    wait_log_count "$dir/server/ladderlog.txt" 'MATCH_WINNER.*role2' "$((winner_count + 1))"
+    printf 'QUIT\n' >&3
+    wait_server_exit "arena-parity-native-server-$index"
+    docker stop -t 10 "arena-parity-native-role1-$index" "arena-parity-native-role2-$index" >/dev/null
+    docker rm -f "arena-parity-native-role1-$index" "arena-parity-native-role2-$index" >/dev/null
 }
 
 run_browser() {
@@ -225,14 +360,20 @@ run_browser() {
     mkdir -p "$dir/server" "$dir/evidence" "$dir/roster"
     chmod 0777 "$dir/server" "$dir/evidence" "$dir/roster"
     export ARENA_RELAY_SECRET=ci-only-ephemeral-relay-secret-material
-    docker run -d --name "arena-parity-browser-server-$index" --network host \
+    server_input=$dir/server-input
+    rm -f "$server_input"
+    mkfifo "$server_input"
+    exec 3<>"$server_input"
+    docker run --rm -i --name "arena-parity-browser-server-$index" --network host \
         -e ARENA_ROSTER_DIR=/arena/roster -v "$dir/server:/arena/var" -v "$dir/roster:/arena/roster:ro" \
         -v "$arena_dir/config/parity-server.cfg:/arena/data/config/parity-server.cfg:ro" \
         arena-native-runtime:parity \
         --datadir /arena/data --configdir /arena/data/config --userconfigdir /arena/var \
         --vardir /arena/var --resourcedir /arena/data/resource \
         --autoresourcedir /arena/var/resource-cache --record /arena/var/match.aarec \
-        --extraconfig parity-server.cfg >/dev/null
+        --extraconfig parity-server.cfg <"$server_input" >"$dir/server-console.log" 2>&1 &
+    server_cli_pid=$!
+    wait_container_running "arena-parity-browser-server-$index"
     docker run -d --name "arena-parity-static-$index" --network host -v "$repo_dir:/src:ro" -v "$repo_dir/build/web:/web:ro" -w /src \
         "$EMSDK_IMAGE_LINUX_AMD64" python3 arena/static_server.py --port 8000 --host 127.0.0.1 --directory /web >/dev/null
     docker run -d --name "arena-parity-relay-$index" --network host -e ARENA_RELAY_SECRET -v "$repo_dir:/src:ro" -v "$dir/evidence:/evidence" -v "$dir/roster:/roster" -w /src \
@@ -249,10 +390,9 @@ run_browser() {
         sleep 1
     done
     docker run --rm --network host -e ARENA_RELAY_SECRET -v "$repo_dir:/src" -w /src "$EMSDK_IMAGE_LINUX_AMD64" \
-        python3 arena/tests/test_browser.py --browser "$browser" --server-log /src/build/parity/runtime/trial-$(printf %03d "$index")/browser/server/ladderlog.txt --evidence-dir /src/build/parity/runtime/trial-$(printf %03d "$index")/browser/evidence --parity-role-schedule
-    wait_log "$dir/server/ladderlog.txt" 'MATCH_WINNER.*role2'
-    docker stop -t 10 "arena-parity-browser-server-$index" >/dev/null
-    docker rm -f "arena-parity-browser-server-$index" "arena-parity-static-$index" "arena-parity-relay-$index" "arena-parity-webdriver-$index" >/dev/null
+        python3 arena/tests/test_browser.py --browser "$browser" --server-log /src/build/parity/runtime/trial-$(printf %03d "$index")/browser/server/ladderlog.txt --server-console /src/build/parity/runtime/trial-$(printf %03d "$index")/browser/server-console.log --server-control /src/build/parity/runtime/trial-$(printf %03d "$index")/browser/server-input --evidence-dir /src/build/parity/runtime/trial-$(printf %03d "$index")/browser/evidence --parity-role-schedule
+    wait_server_exit "arena-parity-browser-server-$index"
+    docker rm -f "arena-parity-static-$index" "arena-parity-relay-$index" "arena-parity-webdriver-$index" >/dev/null
 }
 
 for index in $(seq "$shard_index" "$shard_count" 99); do

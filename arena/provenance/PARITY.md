@@ -20,14 +20,21 @@ SDL path under isolated Xvfb displays. This image does not replace or modify the
 production linux/amd64 dedicated artifact.
 
 Both arms use the versioned schedule
-`role1:wait(200ms),a(120ms),a(120ms),a(120ms);role2:none`: after both local
-objects are live, role1 first travels straight for 200 ms. Each `a` is then
-held for 120 ms and the next begins immediately after release. The three left
-turns close a small upstream trail loop. The harness requires all three role1 turns
-to be delivered and accepted, exactly one entry for
-each role, exactly one role1 suicide before the sole authoritative role2 match
-winner, no role2 suicide, and exactly one
-`GAME_END`. The canonical event/winner result must match per index. Raw ladder
+`setup:start-new-match,wait(200ms),role1:a(120ms)x3;boundary:second-new-match,reset-input-evidence;measured:wait(200ms),role1:a(120ms)x3,role2:none`.
+The setup turns end the upstream one-client startup round after both clients
+connect; the existing `START_NEW_MATCH` console command makes the following
+`NEW_MATCH` the explicit measured boundary. Input evidence is recorded and
+then reset at that boundary. In the measured round role1 first travels straight
+for 200 ms, then each `a` is held for 120 ms and the next begins immediately
+after release. The three left turns close a small upstream trail loop.
+
+The harness requires all setup and measured turns to be delivered and accepted,
+exactly one entry for each role, exactly two `NEW_MATCH` markers, a decisive
+role1 suicide, an authoritative role2 round and match winner, and exactly one
+`GAME_END` produced by upstream `QUIT`. A role2 cleanup suicide after the round
+winner is normalized because upstream may destroy the surviving cycle before or
+after writing `MATCH_WINNER`; it cannot precede the decisive round result. The
+canonical event/winner result must match per index. Raw ladder
 logs, recordings, browser state, and relay datagram evidence are retained.
 Every record binds the exact source commit plus native-client, native-server,
 Wasm, configuration, and input-schedule hashes from one verified build-input
