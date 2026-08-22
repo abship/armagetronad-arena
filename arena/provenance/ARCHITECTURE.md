@@ -34,10 +34,11 @@ nonblank canvas screenshots, and authoritative `PLAYER_ENTERED`,
 reported as passed. Safari remains a separate required macOS run and is not
 implied by a green Linux job.
 
-## Current feasibility result
+## Feasibility evidence checkpoints
 
-The exact candidate `1fd170fed09b783cc629c59cecc19a01d40e0fbb` passed
-the following source-bound gates:
+The last code-changing implementation checkpoint,
+`1fd170fed09b783cc629c59cecc19a01d40e0fbb`, passed the following
+source-bound gates:
 
 - Linux/amd64 run `32551855431`, artifact `9470397328`, digest
   `2ee6d7090b0dbbe6e70607a88ac1d2c66f8be7e2225567f37e9df7c9051a468a`:
@@ -57,6 +58,26 @@ the following source-bound gates:
   complete release packages.
 
 Independent exact-SHA review passed with an empty forbidden-gameplay diff.
+
+A later provenance-only checkpoint,
+`84731c2cb5bfe2cb49096724c65bc8a56b3a978f`, repeated those gates without
+changing product code:
+
+- Linux/amd64 run `32552527461`, artifact `9470576101`, digest
+  `412289ac67bc16a17c3fae7ff07d097461d0003b33f3c69cfb16593b386f4d5a`.
+- Safari run `32552527451`, artifact `9470543205`, digest
+  `1b28af429a8d212ab4f7a581dfb98ce2f0f607e688e4847c2da66791283afcdd`.
+- Reproducibility run `32552527455`, artifact `9470586787`, digest
+  `9e5a41eb0ee416cd7479f186e202be5d86d2d4d7c5b3047eae670a3245f37afb`.
+
+A tracked file cannot name the commit that contains it without changing that
+commit's SHA. Therefore this historical ledger is not the authority for the
+release candidate's identity. Every candidate, including a provenance-only
+change, must rerun the exact-head workflows. Its authoritative binding is the
+checked-out SHA in the workflow run, the generated `SOURCE-MANIFEST.txt`, and
+the matching PR/issue evidence. Evidence from an ancestor is not represented
+as evidence for a descendant.
+
 The remaining ARM-1 gates are the approved 100-match native-client parity
 contract and final immutable GPL/reproducibility release publication. The
 Draft PR remains unmerged.
