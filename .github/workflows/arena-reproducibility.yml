@@ -10,6 +10,9 @@ on:
 permissions:
   contents: read
 
+env:
+  ARENA_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   reproducibility-linux-amd64:
     runs-on: ubuntu-24.04
@@ -19,10 +22,12 @@ jobs:
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           fetch-depth: 0
+          ref: ${{ env.ARENA_CANDIDATE_SHA }}
 
       - name: Verify stable base and protected gameplay diff
         shell: bash
         run: |
+          test "$(git rev-parse HEAD)" = "$ARENA_CANDIDATE_SHA"
           test "$(git rev-parse 'v0.2.9.3.0^{}')" = 036daaf34f055b1efbcee6a4afc4d90a325ce569
           git merge-base --is-ancestor 036daaf34f055b1efbcee6a4afc4d90a325ce569 HEAD
           test -z "$(git diff --name-only 036daaf34f055b1efbcee6a4afc4d90a325ce569...HEAD -- \
