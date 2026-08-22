@@ -30,6 +30,9 @@ test ! -L "$repo_dir/build" && test ! -L "$runtime_dir" || {
 rm -rf "$runtime_dir"
 mkdir -p "$runtime_dir/server" "$runtime_dir/evidence" "$runtime_dir/python" \
     "$runtime_dir/roster"
+server_input="$runtime_dir/server-input"
+mkfifo "$server_input"
+exec 3<>"$server_input"
 
 wheel="$runtime_dir/python/websockets-15.0.1-py3-none-any.whl"
 curl --fail --location --silent --show-error "$WEBSOCKETS_WHEEL_URL" -o "$wheel"
@@ -56,6 +59,10 @@ cleanup() {
     stop_process "$relay_pid"
     stop_process "$static_pid"
     stop_process "$native_pid"
+    if test -n "${server_input-}"; then
+        exec 3>&- || true
+        test ! -p "$server_input" || rm -f "$server_input"
+    fi
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -68,7 +75,7 @@ trap cleanup EXIT HUP INT TERM
     --autoresourcedir "$runtime_dir/server/resource-cache" \
     --record "$runtime_dir/server/match.aarec" \
     --extraconfig arena.cfg \
-    >"$runtime_dir/evidence/native.log" 2>&1 &
+    <"$server_input" >"$runtime_dir/evidence/native.log" 2>&1 &
 native_pid=$!
 
 python3 "$arena_dir/static_server.py" \
@@ -121,9 +128,27 @@ test "$released" = true || {
     exit 1
 }
 
-kill -TERM "$native_pid"
-wait "$native_pid" >/dev/null 2>&1 || true
+printf 'QUIT\n' >&3
+graceful_shutdown=false
+for attempt in $(seq 1 30); do
+    if ! kill -0 "$native_pid" >/dev/null 2>&1; then
+        graceful_shutdown=true
+        break
+    fi
+    sleep 1
+done
+test "$graceful_shutdown" = true || {
+    kill -TERM "$native_pid" >/dev/null 2>&1 || true
+    wait "$native_pid" >/dev/null 2>&1 || true
+    native_pid=
+    echo "native server did not exit after QUIT" >&2
+    exit 1
+}
+wait "$native_pid" >/dev/null 2>&1
 native_pid=
+exec 3>&-
+rm -f "$server_input"
+server_input=
 grep '^GAME_END ' "$runtime_dir/server/ladderlog.txt" > "$runtime_dir/evidence/game-end.log"
 {
     printf 'safari=%s\n' "$safari_version"
