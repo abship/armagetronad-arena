@@ -28,10 +28,13 @@ boundary as ordinal 2 or 3, depending on whether a role1-only pre-admission
 round elapsed while the second client started. Input evidence is recorded and
 then reset at that boundary. In the measured round role1 first travels straight
 for 200 ms, then `a` is held for 120 ms. The parity-only `forced_left` map has
-two symmetric, zone-free straight lanes in a large rim. An unsteered role2 is
-safe for minutes, while the one accepted role1 turn reaches a static lane rail
-with a wide timing margin. Thus client scheduler latency cannot choose the
-winner, and absence of the action cannot produce the required result.
+two symmetric straight lanes in a large rim. An unsteered role2 is safe for
+minutes, while the one accepted role1 turn reaches a static lane rail with a
+wide timing margin. Repeated static win-zone render witnesses are sealed behind
+the continuous rails and cannot be reached by either prescribed trajectory;
+the authoritative event-order gate fails closed if that invariant ever breaks.
+Thus client scheduler latency cannot choose the winner, and absence of the
+action cannot produce the required result.
 
 The harness requires all setup and measured turns to be delivered and accepted,
 exactly one entry for each role, only the bounded optional pre-admission round,
