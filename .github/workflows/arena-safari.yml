@@ -31,10 +31,7 @@ jobs:
         run: |
           test "$(git rev-parse HEAD)" = "$ARENA_CANDIDATE_SHA"
           test "$(git rev-parse 'v0.2.9.3.0^{}')" = 036daaf34f055b1efbcee6a4afc4d90a325ce569
-          test -z "$(git diff --name-only 036daaf34f055b1efbcee6a4afc4d90a325ce569...HEAD -- \
-            src/engine/eGrid.cpp src/engine/eWall.cpp src/engine/eLagCompensation.cpp \
-            src/tron/gArena.cpp src/tron/gCycle.cpp src/tron/gCycleMovement.cpp \
-            src/tron/gSpawn.cpp src/tron/gWall.cpp)"
+          ./arena/check-prediction-telemetry-diff.sh
           ./arena/build-web.sh --platform linux/amd64
           ./arena/prepare-macos-source.sh
       - name: Upload Wasm input

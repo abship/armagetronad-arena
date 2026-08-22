@@ -50,7 +50,13 @@ var arenaInputStatus = Module['arenaInputStatus'] = {
   lastActionAccepted: false,
   localPlayerPresent: false,
   localObjectPresent: false,
-  localObjectAlive: false
+  localObjectAlive: false,
+  predictionCorrections: 0
+};
+Module['arenaRecordPredictionCorrection'] = function() {
+  var count = arenaInputStatus.predictionCorrections;
+  if (!Number.isSafeInteger(count) || count < 0) count = 0;
+  if (count < 0xffffffff) arenaInputStatus.predictionCorrections = count + 1;
 };
 function arenaRecordKey(event) {
   if (event.type === 'keydown') arenaInputStatus.keyDown += 1;

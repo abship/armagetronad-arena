@@ -24,7 +24,8 @@ head=$(git -C "$repo_dir" rev-parse HEAD)
 git -C "$repo_dir" diff --quiet
 git -C "$repo_dir" diff --cached --quiet
 test "$(git -C "$repo_dir" rev-parse "$ARENA_SOURCE_TAG^{}")" = "$ARENA_SOURCE_COMMIT"
-git -C "$repo_dir" merge-base --is-ancestor "$ARENA_SOURCE_COMMIT" "$head"
+test "$(git -C "$repo_dir" rev-parse "$ARENA_PARENT_RELEASE_TAG^{}")" = "$ARENA_PARENT_RELEASE_COMMIT"
+git -C "$repo_dir" merge-base --is-ancestor "$ARENA_PARENT_RELEASE_COMMIT" "$head"
 test ! -L "$repo_dir/build" && test ! -L "$repo_dir/build/reproducibility" || {
     echo "refusing symlinked build directory" >&2
     exit 1

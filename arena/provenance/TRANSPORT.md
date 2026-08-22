@@ -54,5 +54,12 @@ limits reject sustained jank; the maximum catches a hard stall without
 misclassifying one observed dual-session CI outlier as a renderer failure.
 These are stall/leak bounds, not a browser-process or GPU-memory claim.
 
+The browser status also exposes `predictionCorrections`, a saturating unsigned
+32-bit counter. It increments only when the local client's existing
+`SyncFromExtrapolator` reconciliation applies a nonzero positional correction;
+packet receipt, rendering, input, and timing never increment it. The telemetry
+call is compiled only for Emscripten and does not alter the correction vector or
+any native state.
+
 The Emscripten client bypasses the native interactive welcome/first-use UI and
 enters the Arena auto-connect seam directly. Native startup remains unchanged.

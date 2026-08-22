@@ -29,8 +29,9 @@ test "$(git -C "$repo_dir" rev-parse 'v0.2.9.3.0^{}')" = "$ARENA_SOURCE_COMMIT"
 git -C "$repo_dir" merge-base --is-ancestor "$ARENA_SOURCE_COMMIT" HEAD
 test -z "$(git -C "$repo_dir" diff --name-only "$ARENA_SOURCE_COMMIT" -- \
     src/engine/eGrid.cpp src/engine/eWall.cpp src/engine/eLagCompensation.cpp \
-    src/tron/gArena.cpp src/tron/gCycle.cpp src/tron/gCycleMovement.cpp \
+    src/tron/gArena.cpp src/tron/gCycleMovement.cpp \
     src/tron/gSpawn.cpp src/tron/gWall.cpp)"
+(cd "$repo_dir" && ./arena/check-prediction-telemetry-diff.sh)
 test ! -L "$repo_dir/build" && test ! -L "$repo_dir/build/native" || {
     echo "refusing symlinked build directory" >&2
     exit 1
