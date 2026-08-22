@@ -213,6 +213,52 @@ class ParityTests(unittest.TestCase):
                     path, {"setupNewMatch": 2, "measuredNewMatch": 3})["winner"],
                 "role2")
 
+    def test_authoritative_result_accepts_zero_score_pre_admission_abort(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = pathlib.Path(temporary) / "ladderlog.txt"
+            path.write_text(
+                "PLAYER_ENTERED role1 x\nNEW_MATCH prelude\n"
+                "PLAYER_ENTERED role2 x\nROUND_SCORE 0 role1 role1\n"
+                "ROUND_SCORE_TEAM 0 role1\nNEW_MATCH setup\n"
+                "DEATH_SUICIDE role1\nROUND_WINNER role2 x\n"
+                "MATCH_WINNER role2 x\nNEW_MATCH controlled\n"
+                "DEATH_SUICIDE role1\nROUND_WINNER role2 x\n"
+                "MATCH_WINNER role2 x\nGAME_END x\n")
+            self.assertEqual(
+                PARITY.authoritative_result(
+                    path, {"setupNewMatch": 2, "measuredNewMatch": 3})["winner"],
+                "role2")
+
+    def test_authoritative_result_rejects_nonzero_pre_admission_abort(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = pathlib.Path(temporary) / "ladderlog.txt"
+            path.write_text(
+                "PLAYER_ENTERED role1 x\nNEW_MATCH prelude\n"
+                "PLAYER_ENTERED role2 x\nROUND_SCORE 1 role1 role1\n"
+                "ROUND_SCORE_TEAM 1 role1\nNEW_MATCH setup\n"
+                "DEATH_SUICIDE role1\nROUND_WINNER role2 x\n"
+                "MATCH_WINNER role2 x\nNEW_MATCH controlled\n"
+                "DEATH_SUICIDE role1\nROUND_WINNER role2 x\n"
+                "MATCH_WINNER role2 x\nGAME_END x\n")
+            with self.assertRaisesRegex(ValueError, "pre-admission"):
+                PARITY.authoritative_result(
+                    path, {"setupNewMatch": 2, "measuredNewMatch": 3})
+
+    def test_authoritative_result_rejects_abort_before_role2_admission(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = pathlib.Path(temporary) / "ladderlog.txt"
+            path.write_text(
+                "PLAYER_ENTERED role1 x\nNEW_MATCH prelude\n"
+                "ROUND_SCORE 0 role1 role1\nROUND_SCORE_TEAM 0 role1\n"
+                "PLAYER_ENTERED role2 x\nNEW_MATCH setup\n"
+                "DEATH_SUICIDE role1\nROUND_WINNER role2 x\n"
+                "MATCH_WINNER role2 x\nNEW_MATCH controlled\n"
+                "DEATH_SUICIDE role1\nROUND_WINNER role2 x\n"
+                "MATCH_WINNER role2 x\nGAME_END x\n")
+            with self.assertRaisesRegex(ValueError, "pre-admission"):
+                PARITY.authoritative_result(
+                    path, {"setupNewMatch": 2, "measuredNewMatch": 3})
+
     def test_authoritative_result_rejects_unbounded_prelude(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = pathlib.Path(temporary) / "ladderlog.txt"

@@ -134,8 +134,20 @@ def authoritative_result(path, boundary):
         prelude = list(enumerate(lines[boundaries[0]:boundaries[1]], boundaries[0]))
         prelude_deaths = [(index, line.split()[0], line.split()[1])
                           for index, line in prelude if line.startswith("DEATH_")]
-        if ([(event, player) for _index, event, player in prelude_deaths] !=
-                [("DEATH_SUICIDE", "role1")] or
+        prelude_score_entries = [(index, line.split()) for index, line in prelude
+                                 if line.startswith(("ROUND_SCORE ",
+                                                     "ROUND_SCORE_TEAM "))]
+        prelude_scores = [score for _index, score in prelude_score_entries]
+        role2_admissions = [index for index, line in prelude
+                            if line.startswith("PLAYER_ENTERED role2 ")]
+        deaths = [(event, player) for _index, event, player in prelude_deaths]
+        aborted_without_death = (not deaths and prelude_scores == [
+            ["ROUND_SCORE", "0", "role1", "role1"],
+            ["ROUND_SCORE_TEAM", "0", "role1"],
+        ] and len(role2_admissions) == 1 and
+            role2_admissions[0] < prelude_score_entries[0][0])
+        if ((deaths != [("DEATH_SUICIDE", "role1")] and
+                not aborted_without_death) or
                 any(line.startswith(("ROUND_WINNER ", "MATCH_WINNER ", "GAME_END "))
                     for _index, line in prelude)):
             raise ValueError("authoritative pre-admission result differs")
