@@ -2,6 +2,9 @@
 name: Arena same-source reproducibility
 
 on:
+  pull_request:
+    branches:
+      - arena/stable-0.2.9.3.0
   workflow_dispatch:
 
 permissions:
