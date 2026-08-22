@@ -387,8 +387,7 @@ def main():
     evidence = []
 
     try:
-        client_urls = []
-        for number in (1, 2):
+        def make_client_url(number):
             player = (args.browser + str(number))[:16]
             ticket = RELAY.mint_ticket(secret, player, args.browser + "-1v1")
             query = urllib.parse.urlencode(
@@ -398,7 +397,11 @@ def main():
                     "player": "forged" + str(number),
                 }
             )
-            client_urls.append((player, args.client_url + "?" + query))
+            return player, args.client_url + "?" + query
+
+        client_urls = [make_client_url(1)]
+        if args.browser != "safari":
+            client_urls.append(make_client_url(2))
 
         if args.browser == "safari":
             session = create_session(args.webdriver_url, args.browser)
@@ -425,11 +428,46 @@ for (var index = 0; index < arguments.length; ++index) {
 }
 return document.querySelectorAll('iframe').length;
 """,
-                [url for _player, url in client_urls],
+                [client_urls[0][1]],
+            )
+            if frame_count != 1:
+                raise RuntimeError("Safari duel host did not create the first client frame")
+            sessions = [(session, client_urls[0][0], 0)]
+            wait_for_state(
+                args.webdriver_url, sessions[0], 45,
+                "first Safari client live WebGL context",
+                lambda value: value.get("transport") and
+                value["transport"].get("open", 0) >= 1 and
+                value.get("gl") and value["gl"].get("available") and
+                not value["gl"].get("lost") and
+                value["gl"].get("drawingBufferWidth", 0) > 0 and
+                value["gl"].get("drawingBufferHeight", 0) > 0,
+            )
+            first_capture = wait_for(
+                lambda: capture_canvas(
+                    args.webdriver_url, select_client(args.webdriver_url, sessions[0])
+                ),
+                15,
+                "first Safari client nonblank upstream preflight frame",
+            )
+            (evidence_dir / "safari1-preflight.png").write_bytes(first_capture["png"])
+            client_urls.append(make_client_url(2))
+            request(args.webdriver_url, "POST", "/session/{0}/frame".format(session), {"id": None})
+            frame_count = execute(
+                args.webdriver_url,
+                session,
+                """
+var frame = document.createElement('iframe');
+frame.src = arguments[0];
+frame.style.cssText = 'border:0;width:50vw;height:100vh';
+document.body.appendChild(frame);
+return document.querySelectorAll('iframe').length;
+""",
+                [client_urls[1][1]],
             )
             if frame_count != 2:
-                raise RuntimeError("Safari duel host did not create two client frames")
-            sessions = [(session, player, number) for number, (player, _url) in enumerate(client_urls)]
+                raise RuntimeError("Safari duel host did not create the second client frame")
+            sessions.append((session, client_urls[1][0], 1))
         else:
             for player, url in client_urls:
                 session = create_session(args.webdriver_url, args.browser)

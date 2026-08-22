@@ -26,9 +26,9 @@
       if (window.__arenaErrors.length > 32) window.__arenaErrors.shift();
     };
     window.addEventListener('error', function(event) {
-      window.__arenaRecordError(
-        event.error && event.error.stack ? event.error.stack : event.message || 'window error'
-      );
+      var detail = event.error ? String(event.error) : event.message || 'window error';
+      if (event.error && event.error.stack) detail += '\n' + event.error.stack;
+      window.__arenaRecordError(detail);
     });
     window.addEventListener('unhandledrejection', function(event) {
       window.__arenaRecordError(
