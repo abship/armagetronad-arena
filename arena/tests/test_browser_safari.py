@@ -82,6 +82,7 @@ class SafariHelpersTest(unittest.TestCase):
             ("maxGapMs", 751),
             ("heapBytes", 257 * BROWSER.MIB),
             ("heapGrowthBytes", 33 * BROWSER.MIB),
+            ("sampleOverflow", True),
         ):
             rejected = dict(summary)
             rejected[field] = value

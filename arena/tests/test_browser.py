@@ -284,12 +284,14 @@ def summarize_frame_metrics(metrics):
         "initialHeapBytes": initial_heap,
         "heapBytes": heap,
         "heapGrowthBytes": max(0, heap - initial_heap),
+        "sampleOverflow": bool(metrics.get("sampleOverflow", False)),
     }
 
 
 def frame_metrics_pass(metrics):
     return (
         metrics.get("sampleCount", 0) >= 20 and
+        not metrics.get("sampleOverflow", True) and
         metrics.get("p95GapMs") is not None and metrics["p95GapMs"] <= 250 and
         metrics.get("maxGapMs") is not None and metrics["maxGapMs"] <= 750 and
         metrics.get("heapBytes", 257 * MIB) <= 256 * MIB and
@@ -366,6 +368,7 @@ def arm_frame_metrics(base, client):
 Module['arenaFrameMetrics'] = {
   armed: true,
   gaps: [],
+  sampleOverflow: false,
   initialHeapBytes: HEAPU8.buffer.byteLength,
   heapBytes: HEAPU8.buffer.byteLength
 };
@@ -594,17 +597,16 @@ return document.querySelectorAll('iframe').length;
         for index, state in enumerate(live_states):
             evidence[index]["preActionState"] = state
 
-        # Capture while the state above guarantees both upstream cycle objects
-        # are alive. Waiting on one client's later frame before inspecting the
-        # other can leave the second camera in a valid but sparse inter-round
-        # view, even though its gameplay and renderer are healthy.
+        # Each capture is accepted only while that upstream cycle is alive.
+        # Safari frame capture can outlast a round; retry across the next round
+        # instead of sampling a valid but sparse dead/inter-round camera.
         for index, client in enumerate(sessions):
             _session, player, _frame = client
             capture = wait_for(
                 lambda: capture_canvas(
                     args.webdriver_url, select_client(args.webdriver_url, client)
                 ),
-                15,
+                45,
                 player + " nonblank upstream frame at the render boundary",
             )
             (evidence_dir / (player + ".png")).write_bytes(capture["png"])

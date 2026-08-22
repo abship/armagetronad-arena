@@ -43,10 +43,13 @@ split, joined, reordered, or modified. Each real browser match must still pass
 the existing rendering, input, bidirectional-traffic, and native-result gates.
 
 The same harness arms bounded render-loop metrics only after both upstream
-cycles are live. Every client must retain at least 20 swap-gap samples, p95 at
-or below 250 ms, maximum gap at or below 750 ms, Wasm linear memory at or below
-256 MiB, and growth after arming at or below 32 MiB. These are stall/leak bounds,
-not a browser-process or GPU-memory claim.
+cycles are live. Cadence sampling continues through input and the authoritative
+result, but resets across dead/inter-round phases so deliberate lifecycle pauses
+are not mislabeled as render stalls. Every client must retain at least 20 live-
+cycle samples without overflowing the bounded 32,768-sample window, report p95
+at or below 250 ms, maximum gap at or below 750 ms, Wasm linear memory at or
+below 256 MiB, and growth after arming at or below 32 MiB. These are stall/leak
+bounds, not a browser-process or GPU-memory claim.
 
 The Emscripten client bypasses the native interactive welcome/first-use UI and
 enters the Arena auto-connect seam directly. Native startup remains unchanged.

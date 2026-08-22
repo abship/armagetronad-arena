@@ -666,7 +666,9 @@ void rSysDep::SwapGL(){
     // Reuse the existing test-evidence bridge for optional frame capture and
     // test-armed cadence/memory samples. Unarmed clients only look up a property.
     EM_ASM({
-        if ( Module['arenaCaptureRequested'] )
+        var inputStatus = Module['arenaInputStatus'];
+        if ( Module['arenaCaptureRequested'] &&
+                inputStatus && inputStatus['localObjectAlive'] )
         {
             Module['arenaCaptureRequested'] = false;
             try
@@ -682,14 +684,20 @@ void rSysDep::SwapGL(){
         var metrics = Module['arenaFrameMetrics'];
         if ( metrics && metrics['armed'] )
         {
-            var now = performance.now();
-            if ( typeof metrics['previousNow'] === 'number' )
+            if ( inputStatus && inputStatus['localObjectAlive'] )
             {
-                var gaps = metrics['gaps'];
-                gaps.push( now - metrics['previousNow'] );
-                if ( gaps.length > 256 ) gaps.shift();
+                var now = performance.now();
+                if ( typeof metrics['previousNow'] === 'number' )
+                {
+                    var gaps = metrics['gaps'];
+                    if ( gaps.length < 32768 )
+                        gaps.push( now - metrics['previousNow'] );
+                    else
+                        metrics['sampleOverflow'] = true;
+                }
+                metrics['previousNow'] = now;
             }
-            metrics['previousNow'] = now;
+            else metrics['previousNow'] = null;
             metrics['heapBytes'] = HEAPU8.buffer.byteLength;
         }
     });
