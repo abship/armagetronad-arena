@@ -322,12 +322,13 @@ def wait_for(predicate, timeout, description):
     raise RuntimeError("timed out waiting for {0}; last={1!r}".format(description, last))
 
 
-def wait_for_document(base, session, timeout=15):
+def wait_for_document(base, session, expected_url, timeout=15):
     return wait_for(
         lambda: execute(
             base,
             session,
-            "return document.readyState === 'complete';",
+            "return document.readyState === 'complete' && location.href === arguments[0];",
+            [expected_url],
         ),
         timeout,
         "top-level document readiness",
@@ -382,14 +383,15 @@ def main():
 
         if args.browser == "safari":
             session = create_session(args.webdriver_url, args.browser)
+            duel_host_url = urllib.parse.urljoin(args.client_url, ".")
             request(
                 args.webdriver_url,
                 "POST",
                 "/session/{0}/url".format(session),
-                {"url": urllib.parse.urljoin(args.client_url, ".")},
+                {"url": duel_host_url},
                 timeout=10,
             )
-            wait_for_document(args.webdriver_url, session)
+            wait_for_document(args.webdriver_url, session, duel_host_url)
             frame_count = execute(
                 args.webdriver_url,
                 session,
