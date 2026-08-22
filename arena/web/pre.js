@@ -1,18 +1,6 @@
 /* Copyright (C) 2026 Arena contributors. GPLv2+; see COPYING.txt. */
 Module['canvas'] = document.getElementById('canvas');
 Module['thisProgram'] = '/arena-web/bin/armagetronad_main';
-var arenaUserAgent = navigator.userAgent || '';
-var arenaIsSafari = /Safari\//.test(arenaUserAgent) &&
-  !/(Chrome|Chromium|CriOS|Edg)\//.test(arenaUserAgent);
-if (arenaIsSafari) {
-  Module['preinitializedWebGLContext'] = Module['canvas'].getContext('webgl', {
-    alpha: false,
-    antialias: false,
-    depth: true,
-    preserveDrawingBuffer: false,
-    stencil: false
-  });
-}
 // Arena's upstream renderer uses only texture unit 0. Bound legacy GL
 // emulation explicitly because Safari can report zero units during startup.
 Module['GL_MAX_TEXTURE_IMAGE_UNITS'] = 1;
