@@ -215,6 +215,14 @@ void sg_Timestamp()
 static REAL ded_idle=24;
 static tSettingItem<REAL> dedicaded_idle("DEDICATED_IDLE",ded_idle);
 
+// Arena practice mode: keep hosting a live match (filled with AI via MIN_PLAYERS)
+// instead of napping when no human is connected. The arena browser client leaves
+// if its own match resolves instantly, which happens to a lone human on an empty
+// server; with this on, a solo player joins an in-progress bots game instead.
+// Default off, so cash matches keep their humans-only nap/admission behavior.
+static bool sg_arenaPracticeMode=false;
+static tSettingItem<bool> sg_arenaPracticeModeConf("ARENA_PRACTICE_MODE",sg_arenaPracticeMode);
+
 
 static eWavData intro("moviesounds/intro.wav");
 static eWavData extro("moviesounds/extro.wav");
@@ -1463,7 +1471,7 @@ void update_settings( bool const * goon )
             }
         }
 
-        if ( sg_NumUsers() <= 0 && bool( sg_currentGame ) )
+        if ( sg_NumUsers() <= 0 && !sg_arenaPracticeMode && bool( sg_currentGame ) )
         {
             sg_currentGame->NoLongerGoOn();
         }
@@ -1956,7 +1964,7 @@ void sg_HostGame(){
 #ifdef DEDICATED
     static double startTime=tSysTimeFloat();
 
-    if ( sg_NumUsers() == 0)
+    if ( sg_NumUsers() == 0 && !sg_arenaPracticeMode )
     {
         cp();
         con << tOutput("$online_activity_napping") << "\n";
@@ -3468,7 +3476,7 @@ void gGame::StateUpdate(){
                 // save current players into a file
                 cp();
 
-                if ( sg_NumUsers() <= 0 )
+                if ( sg_NumUsers() <= 0 && !sg_arenaPracticeMode )
                     goon = 0;
 
                 Analysis(0);
@@ -3827,7 +3835,7 @@ void gGame::Analysis(REAL time){
 
 #ifdef DEDICATED
     //activeHumans
-    if (sg_NumUsers() <= 0)
+    if (sg_NumUsers() <= 0 && !sg_arenaPracticeMode)
         goon = false;
 #endif
 
